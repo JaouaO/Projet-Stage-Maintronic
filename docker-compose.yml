@@ -1,103 +1,46 @@
-version: '3.8'
+version: "3.8"
 
-services: 
+services:
+  mysql:
+    image: mysql:5.7
+    environment:
+      MYSQL_ROOT_PASSWORD: secret
+      MYSQL_DATABASE: mydb
+      MYSQL_USER: userdb
+      MYSQL_PASSWORD: secret
+    ports:
+      - "3307:3306"             # host:3307 -> container:3306
+    volumes:
+      - ./mysql/data:/var/lib/mysql
+    networks: [mynet]
 
-  mysql: 
-
-    image: mysql:5.7 
-
-    container_name: mysql-server 
-
-    environment: 
-
-      MYSQL_ROOT_PASSWORD: secret 
-
-      MYSQL_DATABASE: mydb 
-
-      MYSQL_USER: userdb 
-
-      MYSQL_PASSWORD: secret 
-
-    ports: 
-
-      - "3307:3306" 
-
-    volumes: 
-
-      - ./mysql/data:/var/lib/mysql 
-
-    networks: 
-
-      - mynet 
-
- 
-
-  phpmyadmin: 
-
-    image: phpmyadmin/phpmyadmin 
-
-    container_name: phpmyadmin 
-
-    environment: 
-
-      PMA_HOST: mysql-server 
-
-      PMA_USER: userdb 
-
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    environment:
+      PMA_HOST: mysql           # utilise le nom de service (plus simple)
+      PMA_USER: userdb
       PMA_PASSWORD: secret
     ports:
       - "8080:80"
+    depends_on: [mysql]
+    networks: [mynet]
 
-    networks: 
+  app:                          # ex-php72 : conteneur Apache+PHP 7.2
+    build: ./php72
+    volumes:
+      - ./src:/var/www/html     # ton code Laravel sera dans ./src
+    depends_on: [mysql]
+    networks: [mynet]
 
-      - mynet 
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on: [app, phpmyadmin]
+    networks: [mynet]
 
- 
-
-  php72: 
-
-    build: ./php72 
-
-    container_name: php72 
-
-    volumes: 
-
-      - ./php72:/var/www/html 
-
-    networks: 
-
-      - mynet 
-
- 
-
-  nginx: 
-
-    image: nginx:alpine 
-
-    container_name: nginx 
-
-    ports: 
-
-      - "80:80" 
-
-    volumes: 
-
-      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro 
-
-    depends_on: 
-
-      - phpmyadmin 
-
-      - php72 
-
-    networks: 
-
-      - mynet 
-
- 
-
-networks: 
-
-  mynet: 
-
-    driver: bridge 
+networks:
+  mynet:
+    driver: bridge
