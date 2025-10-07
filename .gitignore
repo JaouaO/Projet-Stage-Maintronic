@@ -1,0 +1,22 @@
+@"
+# IDE / OS
+.idea/
+.DS_Store
+*.log
+
+# Docker volumes & runtime
+mysql/data/
+**/*.sock
+**/*.pid
+
+# Laravel app (quand on l'ajoutera dans ./src)
+src/.env
+src/.env.*
+src/vendor/
+src/node_modules/
+src/storage/
+src/bootstrap/cache/
+
+# Garder composer.lock
+!src/composer.lock
+"@ | Out-File -Encoding UTF8 .gitignore
