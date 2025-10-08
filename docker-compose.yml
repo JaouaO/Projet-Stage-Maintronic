@@ -17,9 +17,10 @@ services:
   phpmyadmin:
     image: phpmyadmin/phpmyadmin
     environment:
-      PMA_HOST: mysql           # utilise le nom de service (plus simple)
-      PMA_USER: userdb
-      PMA_PASSWORD: secret
+      PMA_HOST: mysql
+      PMA_ARBITRARY: 1
+      UPLOAD_LIMIT: 512M
+      MEMORY_LIMIT: 512M
     ports:
       - "8080:80"
     depends_on: [mysql]
@@ -28,17 +29,21 @@ services:
   app:                          # ex-php72 : conteneur Apache+PHP 7.2
     build: ./php72
     volumes:
-      - ./src:/var/www/html     # ton code Laravel sera dans ./src
+      - ./src:/var/www/html:cached
+      - /var/www/html/storage               # laissé au conteneur (rapide)
+      - /var/www/html/bootstrap/cache
     depends_on: [mysql]
     networks: [mynet]
 
   nginx:
     image: nginx:alpine
+    container_name: docker-nginx
     ports:
       - "80:80"
     volumes:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
-    depends_on: [app, phpmyadmin]
+      - ./src:/var/www/html:cached
+    depends_on: [app]
     networks: [mynet]
 
 networks:
