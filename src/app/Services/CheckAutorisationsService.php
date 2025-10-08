@@ -45,10 +45,10 @@ class CheckAutorisationsService
     {
         $today = Carbon::now('Europe/Paris')->toDateString();
 
-        return DB::table('t_log_util as l')
+        $data = DB::table('t_log_util as l')
             ->select([
                 'l.id', 'l.IP', 'l.DateAcces', 'l.Demat',
-                's.NomSal', 's.CodeAgSal',
+                's.NomSal', 's.CodeAgSal', 's.CodeSal',
                 's.automenu1','s.automenu2','s.automenu3','s.automenu4',
                 's.automenu5','s.automenu6','s.automenu7','s.automenu8',
                 's.automenu9','s.automenu10','s.automenu11','s.automenu12',
@@ -67,7 +67,38 @@ class CheckAutorisationsService
             })
             ->where('l.id', '=', $id)
             ->first();
+
+        if (!$data) return null;
+
+        // Agences autorisées (ADMI / PLUS / DOAG / agence unique)
+        $codeAg  = $data->CodeAgSal ?? null;
+        $codeSal = $data->CodeSal   ?? $data->Util ?? null;
+
+        if (!$codeAg || !$codeSal) {
+            $data->agences_autorisees = [];
+            return $data;
+        }
+
+        if ($codeAg === 'ADMI') {
+            $data->agences_autorisees = DB::table('agence')->pluck('Code_ag')->all();
+        } elseif ($codeAg === 'PLUS') {
+            $data->agences_autorisees = DB::table('t_resp')
+                ->where('CodeSal', $codeSal)
+                ->pluck('CodeAgSal')->unique()->values()->all();
+        } elseif ($codeAg === 'DOAG') {
+            $data->agences_autorisees = DB::table('agence')
+                ->where(function ($q) {
+                    $q->where('Code_ag', 'like', 'M%')
+                        ->orWhere('Code_ag', 'like', 'C%');
+                })
+                ->pluck('Code_ag')->all();
+        } else {
+            $data->agences_autorisees = [$codeAg];
+        }
+
+        return $data;
     }
+
 
     /**
      * Retourne le jour courant au format "Lu", "Ma", "Me", etc.

@@ -60,6 +60,7 @@ class CheckSession
 
         // Partager la ligne DB complète avec Blade
         view()->share('data', $data);
+        view()->share('agences_autorisees', $data->agences_autorisees ?? []);
 
         // Sauvegarder le CodeSal dans la session
         session(['codeSal' => $data->Code_Sal]);

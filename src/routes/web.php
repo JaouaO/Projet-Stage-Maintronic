@@ -29,9 +29,19 @@ Route::get('/deconnexion', function () {
     return redirect()->route('authentification');
 })->name('deconnexion');
 
-Route::get('/accueil', function () {
-    return view('accueil')->with('id', session('id'));
-})->name('accueil')->middleware('check.session');
+Route::get('/accueil', [MainController::class, 'accueil'])
+    ->name('accueil')->middleware('check.session');
+
+Route::post('/accueil/entree', [MainController::class, 'entree'])
+    ->name('accueil.entree')->middleware('check.session');
+
+
+Route::get('/interventions/{numInt}', [MainController::class, 'showIntervention'])
+    ->name('interv.show')->middleware('check.session');
+
+Route::get('/erreur-saisie', [MainController::class, 'saisieErreur'])
+    ->name('saisie.erreur')->middleware('check.session');
+
 
 Route::get('/erreur', function () {
     $message = session('message', 'Une erreur est survenue.');

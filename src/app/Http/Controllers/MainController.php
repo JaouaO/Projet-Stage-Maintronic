@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\NotBlankRequest;
 use Illuminate\Http\Request;
 use App\Services\AuthService;
+use Illuminate\Support\Facades\DB;
 
 class MainController extends Controller
 {
@@ -58,5 +59,51 @@ class MainController extends Controller
             ->with('message', $result['message']);
 
     }
+
+    public function accueil(NotBlankRequest $request)
+    {
+        // Liste légère pour l’autocomplete (adapte la limite si besoin)
+        $numints = DB::table('t_intervention')
+            ->orderByDesc('DateEnr')
+            ->limit(500)
+            ->pluck('NumInt');
+
+        // $data vient du middleware (view()->share)
+        return view('accueil', compact('numints'));
+    }
+
+    public function entree(NotBlankRequest $request)
+    {
+        $idFromUrl  = $request->query('id'); // conservé par ton middleware
+        $sessionId  = session('id');
+        if (!$sessionId || $idFromUrl !== $sessionId) {
+            return redirect()->route('authentification')->with('message', 'Session invalide.');
+        }
+
+        // Validation
+        $validated = $request->validate([
+            'num_int' => ['required','regex:/^[A-Za-z0-9_-]+$/','exists:t_intervention,NumInt'],
+            'agence'  => ['required','regex:/^[A-Za-z0-9_-]+$/'],
+        ]);
+
+        // Ici, si tout est OK → page A
+        return redirect()->route('interv.show', ['numInt' => $validated['num_int']]);
+    }
+
+    public function showIntervention($numInt)
+    {
+        // Exemple minimal : affiche la fiche
+        $interv = DB::table('t_intervention')->where('NumInt', $numInt)->first();
+        if (!$interv) {
+            return redirect()->route('saisie.erreur')->with('error','Intervention introuvable.');
+        }
+        return view('interventions.show', compact('interv'));
+    }
+
+    public function saisieErreur()
+    {
+        return view('erreurs.saisie'); // crée une vue simple avec @if(session('error'))...
+    }
+
 
 }
