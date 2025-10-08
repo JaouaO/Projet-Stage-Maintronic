@@ -34,8 +34,10 @@ class CheckSession
 
         if ($request->isMethod('GET') && $idFromUrl && $idFromUrl !== $sessionId) {
             $flashSuccess = session('success'); // récupère le flash actuel
-            return redirect()->route($request->route()->getName(), ['id' => $sessionId])
-                ->with('success', $flashSuccess); // le repasse si existant
+            $params = array_merge($request->route()->parameters(), ['id' => $sessionId]);
+
+            return redirect()->route($request->route()->getName(), $params)
+                ->with('success', $flashSuccess);
         }
 
         if ($request->isMethod('POST')) {

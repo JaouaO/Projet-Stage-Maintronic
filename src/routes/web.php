@@ -35,12 +35,11 @@ Route::get('/accueil', [MainController::class, 'accueil'])
 Route::post('/accueil/entree', [MainController::class, 'entree'])
     ->name('accueil.entree')->middleware('check.session');
 
+Route::get('/interventions', [MainController::class, 'showInterventions'])
+    ->name('interventions.show')->middleware('check.session');
 
-Route::get('/interventions/{numInt}', [MainController::class, 'showIntervention'])
-    ->name('interv.show')->middleware('check.session');
-
-Route::get('/erreur-saisie', [MainController::class, 'saisieErreur'])
-    ->name('saisie.erreur')->middleware('check.session');
+Route::get('/interventions/{numInt}', [MainController::class, 'editIntervention'])
+    ->name('interventions.edit')->middleware('check.session');
 
 
 Route::get('/erreur', function () {

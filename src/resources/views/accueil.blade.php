@@ -13,7 +13,15 @@
             @foreach($errors->all() as $e) <div>{{ $e }}</div> @endforeach
         </div>
     @endif
+    @if(session('error'))
+        <div class="alert alert-danger">
+            {{ session('error') }}
+        </div>
+    @endif
 
+
+    <fieldset>
+        <legend>Aller à une intervention spécifique</legend>
     <form method="POST" action="{{ route('accueil.entree', ['id' => session('id')]) }}" autocomplete="off">
         @csrf
 
@@ -45,4 +53,11 @@
             <button type="submit" class="btn btn-primary">Valider</button>
         </div>
     </form>
+    </fieldset>
+
+
+    <fieldset>
+        <legend>Aller à la page du récap</legend>
+        <a href="{{ route('interventions.show') }}">Y aller</a>
+    </fieldset>
 @endsection

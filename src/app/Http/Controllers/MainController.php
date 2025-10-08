@@ -72,6 +72,11 @@ class MainController extends Controller
         return view('accueil', compact('numints'));
     }
 
+    public function showInterventions()
+    {
+        return view('interventions.show');
+    }
+
     public function entree(NotBlankRequest $request)
     {
         $idFromUrl  = $request->query('id'); // conservé par ton middleware
@@ -87,22 +92,19 @@ class MainController extends Controller
         ]);
 
         // Ici, si tout est OK → page A
-        return redirect()->route('interv.show', ['numInt' => $validated['num_int']]);
+        return redirect()->route('interv.edit', ['numInt' => $validated['num_int']]);
     }
 
-    public function showIntervention($numInt)
+    public function editIntervention($numInt)
     {
         // Exemple minimal : affiche la fiche
         $interv = DB::table('t_intervention')->where('NumInt', $numInt)->first();
         if (!$interv) {
-            return redirect()->route('saisie.erreur')->with('error','Intervention introuvable.');
+            return redirect()
+                ->route('accueil', ['id' => session('id')])
+                ->with('error', 'Une erreur est survenue dans la saisie. Veuillez vérifier vos informations.');
         }
-        return view('interventions.show', compact('interv'));
-    }
-
-    public function saisieErreur()
-    {
-        return view('erreurs.saisie'); // crée une vue simple avec @if(session('error'))...
+        return view('interventions.edit', compact('interv'));
     }
 
 
