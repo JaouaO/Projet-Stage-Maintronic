@@ -41,6 +41,9 @@ Route::get('/interventions', [MainController::class, 'showInterventions'])
 Route::get('/interventions/{numInt}', [MainController::class, 'editIntervention'])
     ->name('interventions.edit')->middleware('check.session');
 
+Route::post('/interventions/{numInt}/note',
+    [MainController::class, 'updateInternalNote']
+)->name('interventions.note.update')->middleware('check.session');
 
 Route::get('/erreur', function () {
     $message = session('message', 'Une erreur est survenue.');

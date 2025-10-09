@@ -120,15 +120,71 @@ class MainController extends Controller
 
     public function editIntervention($numInt)
     {
-        // Exemple minimal : affiche la fiche
-        $interv = DB::table('t_intervention')->where('NumInt', $numInt)->first();
+        $interv = DB::table('t_intervention')
+            ->selectRaw('t_intervention.*,
+                     CAST(CommentInterne AS CHAR CHARACTER SET utf8mb4) AS CommentInterneTxt')
+            ->where('NumInt', $numInt)
+            ->first();
+
         if (!$interv) {
-            return redirect()
-                ->route('accueil', ['id' => session('id')])
-                ->with('error', 'Une erreur est survenue dans la saisie. Veuillez vérifier vos informations.');
+            return redirect()->route('accueil', ['id' => session('id')])->with('error', 'Intervention introuvable.');
         }
-        return view('interventions.edit', compact('interv'));
+
+        $suivis = DB::table('t_suiviclient_histo')
+            ->where('NumInt', $numInt)
+            ->orderByDesc('CreatedAt')
+            ->orderByDesc('id')
+            ->limit(200)
+            ->get();
+
+        return view('interventions.edit', compact('interv','suivis'));
     }
 
+    public function updateInternalNote(Request $request, $numInt)
+    {
+        try {
+            // 1) validation
+            $request->validate([
+                'id'   => ['required','string'],
+                'note' => ['nullable','string','max:5000'],
+            ]);
+
+            // 2) garde-fou existence
+            $exists = DB::table('t_intervention')->where('NumInt', $numInt)->exists();
+            if (!$exists) {
+                return response()->json(['ok'=>false,'msg'=>'Intervention introuvable'], 404);
+            }
+
+            // 3) update (BLOB accepté ; texte aussi). Si BLOB pose souci, on verra étape 3 ci-dessous
+            DB::table('t_intervention')
+                ->where('NumInt', $numInt)
+                ->update(['CommentInterne' => $request->input('note')]);
+
+            // 4) réponse JSON explicite UTF-8
+            return response()->json(['ok'=>true], 200, ['Content-Type' => 'application/json; charset=utf-8']);
+
+        } catch (\Illuminate\Validation\ValidationException $ve) {
+            // erreurs de validation → 422
+            return response()->json([
+                'ok'  => false,
+                'msg' => $ve->getMessage(),
+                'err' => $ve->errors(),
+            ], 422);
+
+        } catch (\Throwable $e) {
+            // logge exactement ce qui casse
+            \Log::error('updateInternalNote failed', [
+                'numInt' => $numInt,
+                'ex'     => $e->getMessage(),
+                'trace'  => $e->getTraceAsString(),
+            ]);
+
+            // renvoie message lisible au JS
+            return response()->json([
+                'ok'  => false,
+                'msg' => $e->getMessage(), // temporaire pour debug
+            ], 500);
+        }
+    }
 
 }
