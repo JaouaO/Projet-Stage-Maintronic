@@ -19,7 +19,10 @@
         btnSave.style.display   = on ? '' : 'none';
         btnCancel.style.display = on ? '' : 'none';
         btnEdit.style.display   = on ? 'none' : '';
-        statusEl.textContent    = on ? 'Édition en cours…' : '';
+
+        // Ne toucher au status que quand ON passe en édition
+        if (on) statusEl.textContent = 'Édition en cours…';
+
         if (on) elNote.focus();
     }
 
@@ -55,8 +58,8 @@
             }
 
             initialValue = newValue;
-            statusEl.textContent = 'Enregistré ✔';
-            setEditing(false);
+            setEditing(false);                            // <- d'abord on quitte l'édition
+            statusEl.textContent = (data.msg || 'Enregistré ✔');  // <- puis on affiche le message
             setTimeout(()=> statusEl.textContent = '', 1500);
 
         } catch (e) {
