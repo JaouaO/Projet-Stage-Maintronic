@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\NotBlankRequest;
+use App\Http\Requests\TextRequest;
 use App\Services\InterventionService;
+use App\Services\NoteService;
 use Illuminate\Http\Request;
 use App\Services\AuthService;
 use Illuminate\Support\Facades\DB;
@@ -12,11 +14,13 @@ class MainController extends Controller
 {
     protected $authService;
     protected $interventionService;
+    protected $noteService;
 
-    public function __construct(AuthService $authService, InterventionService $interventionService)
+    public function __construct(AuthService $authService, InterventionService $interventionService, NoteService $noteService)
     {
         $this->authService = $authService;
         $this->interventionService = $interventionService;
+        $this->noteService = $noteService;
     }
 
     public function showLoginForm()
@@ -120,15 +124,14 @@ class MainController extends Controller
 
     public function editIntervention($numInt)
     {
-        $interv = DB::table('t_intervention')
-            ->selectRaw('t_intervention.*,
-                     CAST(CommentInterne AS CHAR CHARACTER SET utf8mb4) AS CommentInterneTxt')
-            ->where('NumInt', $numInt)
-            ->first();
-
+        $interv = DB::table('t_intervention')->where('NumInt', $numInt)->first();
         if (!$interv) {
-            return redirect()->route('accueil', ['id' => session('id')])->with('error', 'Intervention introuvable.');
+            return redirect()->route('accueil', ['id' => session('id')])
+                ->with('error', 'Intervention introuvable.');
         }
+
+        // ✅ lecture via service
+        $noteInterne = $this->noteService->getInternalNote($numInt);
 
         $suivis = DB::table('t_suiviclient_histo')
             ->where('NumInt', $numInt)
@@ -137,31 +140,39 @@ class MainController extends Controller
             ->limit(200)
             ->get();
 
-        return view('interventions.edit', compact('interv','suivis'));
+        return view('interventions.edit', compact('interv','suivis','noteInterne'));
     }
 
     public function updateInternalNote(Request $request, $numInt)
     {
-        // Le middleware CheckSession couvre l’authent / session.
-        // On garde une validation ciblée et permissive pour la note.
-        $validated = $request->validate([
-            'id'   => ['required','string'],              // pour satisfaire ton middleware POST
-            'note' => ['nullable','string','max:5000'],  // plain text
-        ]);
+        try {
+            $validated = $request->validate([
+                'id'   => ['required','string'],
+                'note' => ['nullable','string','max:1000'],
+            ], [
+                'note.max' => 'Échec de l’enregistrement',
+            ]);
 
-        // Vérifie l’existence
-        $exists = DB::table('t_intervention')->where('NumInt', $numInt)->exists();
-        if (!$exists) {
-            return response()->json(['ok'=>false,'msg'=>'Intervention introuvable'], 404);
+            $exists = DB::table('t_intervention')->where('NumInt', $numInt)->exists();
+            if (!$exists) {
+                return response()->json(['ok'=>false,'msg'=>'Échec de l’enregistrement'], 404);
+            }
+
+            // ✅ écriture via service (cohérence lecture/écriture)
+            $this->noteService->updateInternalNote($numInt, $validated['note']);
+
+            return response()->json(['ok'=>true, 'msg'=>'Enregistré ✔']);
+        } catch (\Illuminate\Validation\ValidationException $ve) {
+            return response()->json(['ok'=>false, 'msg'=>'Échec de l’enregistrement'], 422);
+        } catch (\Throwable $e) {
+            \Log::error('updateInternalNote failed', [
+                'numInt' => $numInt,
+                'ex'     => $e->getMessage(),
+            ]);
+            return response()->json(['ok'=>false, 'msg'=>'Échec de l’enregistrement'], 500);
         }
-
-        // Mise à jour (paramétrée => pas d’injection)
-        DB::table('t_intervention')
-            ->where('NumInt', $numInt)
-            ->update(['CommentInterne' => $validated['note']]);
-
-        return response()->json(['ok'=>true, 'msg'=>'Enregistré ✔']);
     }
+
 
 
 }

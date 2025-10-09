@@ -3,6 +3,7 @@
 namespace App\Exceptions;
 
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
+use Illuminate\Http\Exceptions\PostTooLargeException;
 use Throwable;
 
 class Handler extends ExceptionHandler
@@ -50,6 +51,15 @@ class Handler extends ExceptionHandler
      */
     public function render($request, Throwable $exception)
     {
+        if ($exception instanceof PostTooLargeException) {
+            // Réponse courte côté AJAX
+            if ($request->expectsJson()) {
+                return response()->json(['ok'=>false, 'msg'=>'Échec de l’enregistrement'], 413);
+            }
+            // Page classique
+            return redirect()->back()->with('error', 'Échec de l’enregistrement');
+        }
+
         return parent::render($request, $exception);
     }
 }

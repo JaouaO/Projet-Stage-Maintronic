@@ -23,15 +23,16 @@
             <div style="padding:12px">
                 <div id="noteInterne"
                      data-update-url="{{ route('interventions.note.update', ['numInt' => $interv->NumInt]) }}"
-                     style="min-height:80px;border:1px dashed #d1d5db;border-radius:6px;padding:8px;white-space:pre-wrap;cursor:text;background:#fff;">
-                    {{ $interv->CommentInterneTxt ?? '' }}
+                     style="height:140px;overflow-y:auto;border:1px dashed #d1d5db;border-radius:6px;padding:8px;white-space:pre-wrap;cursor:text;background:#fff;">
+                    {{ $noteInterne }}
                 </div>
 
-                <div style="display:flex;gap:8px;margin-top:8px;">
-                    <button id="btnEdit"    type="button" style="padding:6px 10px;border:1px solid #e5e7eb;border-radius:6px;background:#fff">Modifier</button>
-                    <button id="btnSave"    type="button" style="padding:6px 10px;border:1px solid #cfe0ff;border-radius:6px;background:#e8f1ff;display:none;">Enregistrer</button>
-                    <button id="btnCancel"  type="button" style="padding:6px 10px;border:1px solid #e5e7eb;border-radius:6px;background:#fff;display:none;">Annuler</button>
-                    <span id="noteStatus"   style="margin-left:auto;font-size:12px;color:#657089;"></span>
+                <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+                    <button id="btnEdit"   type="button" style="padding:6px 10px;border:1px solid #e5e7eb;border-radius:6px;background:#fff">Modifier</button>
+                    <button id="btnSave"   type="button" style="padding:6px 10px;border:1px solid #cfe0ff;border-radius:6px;background:#e8f1ff;display:none;">Enregistrer</button>
+                    <button id="btnCancel" type="button" style="padding:6px 10px;border:1px solid #e5e7eb;border-radius:6px;background:#fff;display:none;">Annuler</button>
+                    <span id="noteCounter" style="margin-left:auto;font-size:12px;color:#657089;"></span>
+                    <span id="noteStatus"  style="font-size:12px;color:#657089;"></span>
                 </div>
             </div>
         </div>
