@@ -30,8 +30,8 @@
             <input id="num_int" name="num_int" class="form-control" list="numint-list"
                    placeholder="Tapez ou choisissez…" value="{{ old('num_int') }}" required>
             <datalist id="numint-list">
-                @foreach($numints as $n)
-                    <option value="{{ $n }}">{{ $n }}</option>
+                @foreach($numints as $numInt)
+                    <option value="{{ $numInt }}">{{ $numInt }}</option>
                 @endforeach
             </datalist>
             <small class="form-text text-muted">Saisie assistée : liste filtrée pendant la frappe.</small>
@@ -41,8 +41,8 @@
             <label for="agence">Agence</label>
             <select id="agence" name="agence" class="form-control" required>
                 @php $agences = $data->agences_autorisees ?? []; @endphp
-                @forelse($agences as $ag)
-                    <option value="{{ $ag }}" @selected(old('agence')===$ag)>{{ $ag }}</option>
+                @forelse($agences as $agence)
+                    <option value="{{ $agence }}" @selected(old('agence')===$agence)>{{ $agence }}</option>
                 @empty
                     <option value="" disabled>Aucune agence autorisée</option>
                 @endforelse

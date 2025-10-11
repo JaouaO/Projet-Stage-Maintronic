@@ -66,21 +66,21 @@
                         </thead>
 
                         <tbody id="rowsBody">
-                        @forelse($rows as $r)
-                            @php $cls = $todoTagClass[$r->todo] ?? 'neutral'; @endphp
-                            <tr class="row" data-href="{{ route('interventions.edit', ['numInt' => $r->num_int]) }}">
-                                <td class="col-id">{{ $r->num_int }}</td>
-                                <td class="col-client">{{ $r->client }}</td>
+                        @forelse($rows as $row)
+                            @php $cls = $todoTagClass[$row->todo] ?? 'neutral'; @endphp
+                            <tr class="row" data-href="{{ route('interventions.edit', ['numInt' => $row->num_int]) }}">
+                                <td class="col-id">{{ $row->num_int }}</td>
+                                <td class="col-client">{{ $row->client }}</td>
                                 <td class="col-date">
-                                    {{ $r->date_prev ? \Carbon\Carbon::parse($r->date_prev)->format('d/m/Y') : '—' }}
+                                    {{ $row->date_prev ? \Carbon\Carbon::parse($row->date_prev)->format('d/m/Y') : '—' }}
                                 </td>
                                 <td class="col-heure">
-                                    {{ $r->heure_prev ? \Carbon\Carbon::parse($r->heure_prev)->format('H:i') : '—' }}
+                                    {{ $row->heure_prev ? \Carbon\Carbon::parse($row->heure_prev)->format('H:i') : '—' }}
                                 </td>
                                 <td class="col-todo"><span
-                                        class="tag {{ $cls }}">{{ str_replace('_',' ', $r->todo) }}</span></td>
+                                        class="tag {{ $cls }}">{{ str_replace('_',' ', $row->todo) }}</span></td>
                                 <td class="col-actions">
-                                    <a class="btn" href="{{ route('interventions.edit', ['numInt' => $r->num_int]) }}">Ouvrir</a>
+                                    <a class="btn" href="{{ route('interventions.edit', ['numInt' => $row->num_int]) }}">Ouvrir</a>
                                 </td>
                             </tr>
                         @empty
