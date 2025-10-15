@@ -50,3 +50,6 @@ Route::get('/erreur', function () {
     return view('error', ['message' => $message]);
 })->name('erreur');
 
+
+Route::get('/api/planning/{codeTech}', [MainController::class,'apiPlanningTech'])
+    ->name('api.planning.tech')->middleware('check.session');
