@@ -1,0 +1,325 @@
+;(() => { /* ... */ })();
+
+(function () {
+    // Horloge (base = heure serveur)
+    //const base = new Date("{{ $serverNow }}");
+        const base = new Date((window.APP && window.APP.serverNow) || Date.now());
+    let now = new Date(base.getTime());
+    const pad = n => (n < 10 ? '0' : '') + n;
+    const draw = () => {
+    const d = document.getElementById('srvDateText'), t = document.getElementById('srvTimeText');
+    if (d) d.textContent = `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()}`;
+    if (t) t.textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+};
+    draw();
+    setInterval(() => {
+    now = new Date(now.getTime() + 60 * 1000);
+    draw();
+}, 60 * 1000);
+
+    // Réaffectation : toggle TECH / SAL + agenda
+    // ✅ Réaffectation : seulement l’affichage TECH/SAL (plus de agendaWrap/agendaTech ici)
+    const reaRadios = document.querySelectorAll('input[name="reaType"]');
+    const rowTech = document.getElementById('rowTech');
+    const rowSal = document.getElementById('rowSal');
+    const selTech = document.getElementById('selTech');
+
+    function setMode(mode) {
+    if (!rowTech || !rowSal) return; // garde-fou
+    const techMode = mode === 'TECH';
+    rowTech.style.display = techMode ? '' : 'none';
+    rowSal.style.display = techMode ? 'none' : '';
+    if (!techMode && selTech) {
+    selTech.value = '';
+}
+}
+
+    reaRadios.forEach(r => r.addEventListener('change', e => setMode(e.target.value)));
+    setMode('TECH');
+})();
+
+
+    (function () {
+    const sel = document.getElementById('selModeTech');
+    const calGrid = document.getElementById('calGrid');
+    const calTitle = document.getElementById('calTitle');
+    const calPrev = document.getElementById('calPrev');
+    const calNext = document.getElementById('calNext');
+    const calList = document.getElementById('calList');
+    const calListTitle = document.getElementById('calListTitle');
+    const calListRows = document.getElementById('calListRows');
+    const calWrap   = document.getElementById('calWrap');
+    const calToggle = document.getElementById('calToggle');
+    let   lastShownKey = null;
+    const dayNext = document.getElementById('dayNext');
+    let   BYDAY = {};   // cache des données par jour (clé 'YYYY-MM-DD' -> {count, items[]})
+
+    if (!sel || !calGrid) return;
+
+    // Tech codes (for fallback ALL aggregation)
+    //const TECHS = @json($techniciens->pluck('CodeSal')->values());
+    //const NAMES = Object.fromEntries(@json($techniciens->map(fn($t)=>[$t->CodeSal,$t->NomSal])->values()));
+
+
+        const APP        = window.APP || {};
+        const TECHS      = APP.techs || [];
+        const NAMES      = APP.names || {};
+        const API_ROUTE  = APP.apiPlanningRoute || '';
+        const SESSION_ID = APP.sessionId || '';
+    const pad = n => (n < 10 ? '0' : '') + n;
+    const ymd = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    const frMonth = (y, m) => new Date(y, m, 1).toLocaleDateString('fr-FR', {month: 'long', year: 'numeric'});
+
+    // Visible month state
+    let view = new Date();
+    view.setDate(1);
+
+    // Heat color from low (green) -> high (red)
+    const heat = (val, max) => {
+    if (!max) return '#ffffff';
+    const t = Math.max(0, Math.min(1, val / max));           // 0..1
+    const hue = Math.round(120 * (1 - t));                    // 120=green -> 0=red
+    const sat = 80, light = 92 - Math.round(35 * t);          // lighter for low counts
+    return `hsl(${hue} ${sat}% ${light}%)`;
+};
+
+    async function fetchRange(code, from, to) {
+    //const urlBase = `{{ route('api.planning.tech', ['codeTech'=>'__X__']) }}`.replace('__X__', encodeURIComponent(code));
+    //const url = `${urlBase}?from=${from}&to=${to}&id={{ session('id') }}`;
+        const urlBase = API_ROUTE.replace('__X__', encodeURIComponent(code));
+        const url = `${urlBase}?from=${from}&to=${to}&id=${encodeURIComponent(SESSION_ID)}`;
+
+        const res = await fetch(url, {headers: {'Accept': 'application/json'}});
+    const txt = await res.text();
+    let data = null;
+    try {
+    data = JSON.parse(txt);
+} catch (e) {
+}
+    return {ok: !!(data && data.ok === true), data, status: res.status, body: txt};
+}
+
+    async function fetchRangeAll(from, to) {
+    // Try server-side _ALL first
+    const tryAll = await fetchRange('_ALL', from, to);
+    if (tryAll.ok) return tryAll.data.events || [];
+
+    // Fallback: aggregate in client
+    const all = [];
+    await Promise.all(TECHS.map(async code => {
+    const r = await fetchRange(code, from, to);
+    if (r.ok && r.data && Array.isArray(r.data.events)) {
+    // enforce code_tech present
+    r.data.events.forEach(e => {
+    if (!e.code_tech) e.code_tech = code;
+    all.push(e);
+});
+} else {
+    console.warn('Planning fallback fetch failed for', code, r.status, r.body);
+}
+}));
+    return all;
+}
+
+    function monthBounds(d) {
+    const y = d.getFullYear(), m = d.getMonth();
+    const first = new Date(y, m, 1);
+    const last = new Date(y, m + 1, 0); // last day of month
+    return {first, last};
+}
+
+    function startOfWeek(d) {
+    const r = new Date(d);
+    const wd = (r.getDay() + 6) % 7; // Mon=0
+    r.setDate(r.getDate() - wd);
+    return r;
+}
+
+    function addDays(d, n) {
+    const r = new Date(d);
+    r.setDate(r.getDate() + n);
+    return r;
+}
+
+    function hoursOnly(iso) {
+    const dt = new Date(iso);
+    return pad(dt.getHours()) + ':' + pad(dt.getMinutes());
+}
+
+    async function render() {
+    const {first, last} = monthBounds(view);
+    const from = ymd(first), to = ymd(last);
+    calTitle.textContent = frMonth(view.getFullYear(), view.getMonth());
+
+    const mode = sel.value || '_ALL';
+    let events = [];
+    if (mode === '_ALL') {
+    events = await fetchRangeAll(from, to);
+} else {
+    const r = await fetchRange(mode, from, to);
+    if (r.ok) events = r.data.events || []; else events = [];
+}
+
+    // Aggregate count by day
+    const byDay = {}; // 'YYYY-MM-DD' => {count, items[]}
+    (events || []).forEach(e => {
+    const dkey = (e.start_datetime || '').slice(0, 10);
+    if (!dkey) return;
+    if (!byDay[dkey]) byDay[dkey] = {count: 0, items: []};
+    byDay[dkey].count++;
+    byDay[dkey].items.push(e);
+});
+    const maxCount = Object.values(byDay).reduce((m, v) => Math.max(m, v.count), 0);
+
+    // Build grid: 7 weekdays header + 6 rows
+    const labels = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+    let html = labels.map(w => `<div class="cal-weekday">${w}</div>`).join('');
+
+    const gridStart = startOfWeek(new Date(first));     // Monday before (or equal) 1st
+    const totalCells = 42;                               // 6 weeks
+    for (let i = 0; i < totalCells; i++) {
+    const day = addDays(gridStart, i);
+    const inMonth = day.getMonth() === view.getMonth();
+    const key = ymd(day);
+    const meta = byDay[key] || {count: 0, items: []};
+    const bg = heat(meta.count, maxCount);
+    html += `<div class="cal-cell ${inMonth ? '' : 'muted'}" data-date="${key}" style="background:${bg}">
+        <span class="d">${day.getDate()}</span>
+        <span class="dot" title="${meta.count} RDV" style="background:${meta.count ? '#1112' : ''}"></span>
+      </div>`;
+}
+    calGrid.innerHTML = html;
+    BYDAY = byDay;
+
+// Click day => show list (via showDay)
+    calGrid.querySelectorAll('.cal-cell').forEach(cell=>{
+    cell.addEventListener('click', ()=>{
+    const key = cell.getAttribute('data-date');
+    showDay(key, byDay);
+});
+});
+
+// Persistance de la liste : si un jour est déjà choisi, on le ré-affiche
+    if (lastShownKey && byDay[lastShownKey]) {
+    showDay(lastShownKey, byDay);
+} else if (calWrap?.classList.contains('collapsed')) {
+    // en mode replié sans sélection -> afficher aujourd'hui (ou 1er jour dispo)
+    const todayKey = ymd(new Date());
+    const fallbackKey = byDay[todayKey] ? todayKey : Object.keys(byDay).sort()[0];
+    if (fallbackKey) showDay(fallbackKey, byDay);
+} else {
+    // mois déplié et aucune sélection -> on peut masquer la liste
+    calList.style.display = 'none';
+}
+
+
+}
+    function showDay(key, byDay){
+    if (!key) return;
+    const list = (byDay[key]?.items || []).slice()
+    .sort((a,b)=> (a.start_datetime||'').localeCompare(b.start_datetime||''));
+    calListTitle.textContent = `RDV du ${key.split('-').reverse().join('/')}`;
+    const rows = list.map(e=>{
+    const hhmm = hoursOnly(e.start_datetime);
+    const tech = e.code_tech || '';
+    const contact = e.contact || '—';
+    const comment = e.label || '';
+    return `<tr>
+      <td>${hhmm}</td><td>${tech}</td><td>${contact}</td><td>${comment}</td>
+    </tr>`;
+}).join('') || `<tr><td colspan="4" class="note">Aucun rendez-vous</td></tr>`;
+    calListRows.innerHTML = rows;
+    calList.style.display = '';
+    lastShownKey = key;
+}
+
+    // Prev/Next month
+    calPrev?.addEventListener('click', () => {
+    view.setMonth(view.getMonth() - 1);
+    render();
+});
+    calNext?.addEventListener('click', () => {
+    view.setMonth(view.getMonth() + 1);
+    render();
+});
+
+    // Change selection (ALL by default)
+    sel.addEventListener('change', () => render());
+
+    function keyToDate(key){ const [y,m,d] = key.split('-').map(Number); return new Date(y, m-1, d); }
+
+    async function goNextDay(){
+    // point de départ = jour déjà affiché, sinon aujourd’hui
+    const base = lastShownKey ? keyToDate(lastShownKey) : new Date();
+    const next = new Date(base.getFullYear(), base.getMonth(), base.getDate()+1);
+    const nextKey = ymd(next);
+
+    // si le mois change, on avance la vue puis on re-render avant d'afficher
+    const monthChanged = (next.getMonth() !== view.getMonth()) || (next.getFullYear() !== view.getFullYear());
+    if (monthChanged){
+    view = new Date(next.getFullYear(), next.getMonth(), 1);
+    await render();             // remet à jour BYDAY
+}
+    showDay(nextKey, BYDAY);        // affichera "Aucun rendez-vous" si pas d’items
+}
+
+    dayNext?.addEventListener('click', ()=>{ goNextDay(); });
+
+
+    function setCollapsed(on){
+    if (!calWrap) return;
+    calWrap.classList.toggle('collapsed', !!on);
+    if (calToggle){
+    calToggle.textContent = on ? '▸ Mois' : '▾ Mois';
+    calToggle.setAttribute('aria-expanded', (!on).toString());
+}
+    // Si on replie sans sélection en cours, afficher aujourd'hui
+    if (on && !lastShownKey) {
+    const { first } = monthBounds(view);
+    const todayKey = ymd(new Date());
+    // On re-déclenchera showDay après le prochain render()
+}
+}
+
+    calToggle?.addEventListener('click', ()=>{
+    const on = !calWrap.classList.contains('collapsed');
+    setCollapsed(on);
+    // re-render pour recalculer byDay + fallback showDay si besoin
+    render();
+});
+
+// Par défaut : calendrier déplié
+    setCollapsed(false);
+
+
+    // Initial
+    (function(){
+    const box = document.getElementById('agendaBox');
+
+    function sizeAgendaBox(){
+    if(!box) return;
+    const rect = box.getBoundingClientRect();
+    const gap = 12; // marge basse, même esprit que tes paddings
+    const max = window.innerHeight - rect.top - gap;
+    box.style.maxHeight = Math.max(200, max) + 'px';
+}
+
+    // évite que la page scrolle quand on est dans l'agenda
+    box?.addEventListener('wheel', (e)=>{
+    const el = box;
+    const delta = e.deltaY;
+    const atTop = el.scrollTop <= 0;
+    const atBottom = Math.ceil(el.scrollTop + el.clientHeight) >= el.scrollHeight;
+    if ((delta < 0 && !atTop) || (delta > 0 && !atBottom)){
+    e.preventDefault();          // on consomme le scroll ici
+    el.scrollTop += delta;
+}
+}, { passive:false });
+
+    window.addEventListener('resize', sizeAgendaBox);
+    // petit délai pour laisser le layout se poser (taille sticky dépend du contenu)
+    window.addEventListener('load', ()=>setTimeout(sizeAgendaBox, 0));
+    sizeAgendaBox();
+})();
+    render();
+})();
