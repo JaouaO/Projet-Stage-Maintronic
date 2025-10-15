@@ -1,0 +1,176 @@
+:root {
+    --gap: 12px;
+    --r: 8px;
+    --bg: #f4f5f7;
+    --panel: #fff;
+    --ink: #222;
+    --mut: #666;
+    --line: #d6d9df;
+    --head: #e9f2ff;
+}
+
+* { box-sizing: border-box }
+html, body { height: 100% }
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 14px/1.4 system-ui, Segoe UI, Arial;
+}
+
+/* ---- Layout plein écran (responsive) ---- */
+.app{
+    min-height:100vh; width:100%; max-width:1800px; margin:0 auto; padding:12px;
+    display:grid; gap:var(--gap);
+    grid-template-columns:minmax(260px,26%) minmax(380px,36%) minmax(520px,38%);
+    align-items:stretch;
+}
+.col{ min-height:0; display:flex; flex-direction:column; gap:var(--gap) }
+
+/* Cartes */
+.box{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:var(--r,8px);
+    display:flex; flex-direction:column; min-height:0;
+}
+.box .head{
+    display:flex; justify-content:space-between; align-items:center; gap:8px;
+    padding:8px 10px; background:var(--head); border-bottom:1px solid var(--line);
+    border-top-left-radius:var(--r,8px); border-top-right-radius:var(--r,8px);
+}
+.box .body{ padding:10px; display:flex; flex-direction:column; gap:8px; min-height:0 }
+
+/* Gauche : empêche l'explosion en dézoom */
+.left .hist{ flex:1 1 auto; min-height:200px; max-height:52vh }
+.left .mserv{ flex:0 0 auto }
+
+/* Note interne */
+#noteInterne{
+    height:72px; overflow:auto;
+    border:1px dashed var(--line); border-radius:6px; padding:8px;
+    white-space:pre-wrap; background:#fff; cursor:text;
+}
+.note-toolbar{ display:flex; gap:8px; align-items:center; }
+
+/* Table */
+.table{ flex:1; overflow:auto; margin:0 }
+table{ width:100%; border-collapse:collapse; font-size:13px }
+th,td{ padding:7px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top }
+th{ background:#f7faff; position:sticky; top:0; z-index:1 }
+td.status{ text-align:center; width:66px }
+.status input{ transform:scale(1.05) }
+.note{ color:var(--mut); font-size:12px }
+
+/* Champs */
+.gridObj{ display:grid; grid-template-columns:120px 1fr; gap:8px; align-items:center }
+.grid2{ display:grid; grid-template-columns:120px 1fr; gap:8px; align-items:center }
+.gridRow{ display:grid; grid-template-columns:120px 1fr 110px 1fr; gap:8px; align-items:center }
+input,select,textarea{ width:100%; padding:7px; border:1px solid var(--line); border-radius:6px; background:#fff }
+.ro{
+    padding:7px; border:1px dashed var(--line); border-radius:6px; background:#f9fafb;
+    user-select:text; cursor:default; white-space:normal; overflow:hidden;
+}
+
+/* Colonne Centre/Droite doivent pouvoir grandir */
+.center .box, .right .box{ flex:1 1 auto }
+
+/* Pane affectation collé en haut de la colonne droite */
+.right .affectationSticky{
+    position:sticky; top:12px; z-index:3; background:var(--panel);
+    padding-bottom:8px; border-bottom:1px solid var(--line);
+}
+
+/* Agenda : container scrollable + head sticky */
+.agendaBox{ display:flex; flex-direction:column; overflow:auto; max-height:60vh }
+.agendaBox .head{ position:sticky; top:0; z-index:2; background:var(--head); }
+
+/* Cartes agenda 5j (optionnel) */
+#agendaTech{ display:grid; grid-template-columns:repeat(5,1fr); gap:8px }
+.agendaCard{ border:1px solid #e5e7eb; border-radius:6px; padding:8px; background:#fff }
+
+/* Calendrier mensuel compact */
+.cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:6px }
+.cal-weekday{ text-align:center; font-size:12px; color:var(--mut) }
+.cal-cell{
+    border:1px solid var(--line); border-radius:6px; background:#fff;
+    min-height:42px; padding:6px; font-size:12px;
+    display:flex; align-items:flex-start; justify-content:flex-end; position:relative; cursor:pointer; user-select:none;
+}
+.cal-cell .d{ font-variant-numeric:tabular-nums }
+.cal-cell.muted{ opacity:.55 }
+.cal-cell:hover{ outline:2px solid #cfe0ff }
+.cal-cell .dot{
+    position:absolute; left:6px; bottom:6px; width:8px; height:8px; border-radius:999px; border:1px solid rgba(0,0,0,.05);
+}
+#calWrap.collapsed #calGrid{ display:none }
+
+/* Boutons */
+.btn{ border:1px solid var(--line); background:#eef3ff; padding:6px 12px; border-radius:6px }
+.btn.ok{ background:#e9f8ef; border-color:#cfead6; color:#0d6b2d; font-weight:600 }
+
+/* Masque l’en-tête du tableau “Étapes de planification” */
+.affectationSticky thead{ display:none }
+
+/* === Agenda technicien : compact === */
+.agendaBox .head{ padding:6px 8px }         /* 8px -> 6px */
+.agendaBox .body{ padding:8px; gap:8px }    /* 10px -> 8px */
+.agendaBox .grid2{ grid-template-columns:96px 1fr; gap:6px } /* 120px -> 96px ; 8px -> 6px */
+.cal-grid{ gap:4px }                         /* 6px -> 4px */
+.cal-weekday{ font-size:11px }               /* 12px -> 11px */
+.cal-cell{ min-height:34px; padding:4px; font-size:11px } /* 42px/6px/12px -> 34px/4px/11px */
+#calListTitle{ margin:4px 0; font-size:12.5px }
+#calList .table thead th, #calList .table td{ padding:6px }
+
+/* === Remplacements des styles inline supprimés === */
+#calHead{ display:flex; align-items:center; gap:8px; justify-content:space-between }
+#calHeadMid{ display:flex; align-items:center; gap:8px }
+#calTitle{ font-weight:600 }
+
+/* utilitaires boutons/titres */
+#calPrev, #calNext, #calToggle{ padding:4px 8px }
+#calListHead{ display:flex; align-items:center; justify-content:space-between; margin:6px 0 }
+#dayNext{ padding:2px 8px }
+
+/* utilitaires génériques */
+.mt6{ margin-top:6px } .mt8{ margin-top:8px }
+.flex-end-bar{ display:flex; justify-content:flex-end; margin:8px 0 4px }
+.hstack-8{ display:flex; gap:8px; align-items:center }
+.hstack-6{ display:flex; gap:6px; align-items:center }
+.ml-auto{ margin-left:auto }
+
+/* HIDE/SHOW utilitaire (remplace display:none inline) */
+.is-hidden{ display:none !important }
+
+/* Largeurs de colonnes (remplacent width inline) */
+.w-150{ width:150px }
+.w-66{ width:66px }
+.w-80{ width:80px }
+.w-200{ width:200px }
+
+/* Masquage générique */
+.is-hidden { display: none !important; }
+
+/* Barre d’actions de la note */
+.note-toolbar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+.note-toolbar .ml-auto { margin-left: auto; }
+
+/* Zone de note */
+#noteInterne {
+    border: 1px dashed var(--line);
+    border-radius: 6px;
+    padding: 8px;
+    white-space: pre-wrap;
+    background: #fff;
+    cursor: text;
+    outline: none;
+}
+#noteInterne.is-editing { border-style: solid; }
+
+/* Boutons (au cas où un reset CSS les cacherait) */
+.note-toolbar .btn { display: inline-flex; align-items: center; }
+
