@@ -107,7 +107,15 @@ input,select,textarea{ width:100%; padding:7px; border:1px solid var(--line); bo
 
 /* Boutons */
 .btn{ border:1px solid var(--line); background:#eef3ff; padding:6px 12px; border-radius:6px }
-.btn.ok{ background:#e9f8ef; border-color:#cfead6; color:#0d6b2d; font-weight:600 }
+.btn.ok{ background:#e9f8ef; border-color:#0d6b2d; color:#0d6b2d; font-weight:600 }
+
+#btnPlanifier{
+    background:#e9f8ef; border-color: #0C7532FF; color:#0C7532FF; cursor: pointer; font-weight:600
+
+}
+#btnPlanifier:hover{
+    background: #ffffff; border-color: #0A4C2DFF; color:#0A4C2DFF; cursor: pointer; font-weight:600
+}
 
 /* Masque l’en-tête du tableau “Étapes de planification” */
 .affectationSticky thead{ display:none }

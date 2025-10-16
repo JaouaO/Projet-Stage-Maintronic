@@ -202,5 +202,47 @@ class MainController extends Controller
         }
     }
 
+    public function updateIntervention(Request $request, $numInt)
+    {
+
+
+
+        $inputs = $request->except('_token');
+
+        dump($inputs);
+        return view('test');
+
+        $noteInterne  = trim((string) $request->input('note_interne', ''));
+        $commentaire  = trim((string) $request->input('commentaire', ''));
+        $contactReel  = trim((string) $request->input('contact_reel', ''));
+        $reaType      = $request->input('rea_type'); // 'TECH' | 'SAL'
+        $reaTech      = $request->input('rea_tech'); // ex: BETA
+        $reaSal       = $request->input('rea_sal');  // si tu l’as côté SAL
+        $dateRdv      = $request->input('date_rdv'); // 'YYYY-MM-DD'
+        $heureRdv     = $request->input('heure_rdv'); // 'HH:MM' (ou null)
+        $traitement   = (array) $request->input('traitement', []);
+        $affectation  = (array) $request->input('affectation', []);
+        $numInt       = (int) $numInt;
+        $codeSal =$request->input('code_sal_auteur');
+
+
+        $exists=DB::table('t_suiviclient_histo')->where('NumInt', $numInt)->exists();
+        $data = [
+
+            'CommentInterne'=> $noteInterne,
+            'DateIntPrevu'   => $dateRdv,
+            'HeureIntPrevu'  => $heureRdv,     // car heure_rdv était null
+            'CodeTech'       => $reaType=="Tech"?$reaTech:'',
+        ];
+        if ($exists) {
+            DB::table('t_suiviclient_histo')
+                ->where('NumInt', $numInt)
+                ->update($data);
+        } else {
+            DB::table('t_suiviclient_histo')->insert($data);
+        }
+
+
+    }
 
 }

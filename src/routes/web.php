@@ -41,6 +41,10 @@ Route::get('/interventions', [MainController::class, 'showInterventions'])
 Route::get('/interventions/{numInt}', [MainController::class, 'editIntervention'])
     ->name('interventions.edit')->middleware('check.session');
 
+Route::post('/interventions/update/{numInt}', [MainController::class, 'updateIntervention'])
+    ->name('interventions.update')->middleware('check.session');
+
+
 Route::post('/interventions/{numInt}/note',
     [MainController::class, 'updateInternalNote']
 )->name('interventions.note.update')->middleware('check.session');

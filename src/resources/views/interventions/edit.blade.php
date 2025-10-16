@@ -2,297 +2,346 @@
 @section('title', 'Intervention')
 
 @section('content')
+
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="stylesheet" href="{{ asset('css/intervention_edit.css') }}">
+    <form id="interventionForm"
+          method="POST"
+          onsubmit="return confirm('Confirmer la validation?');"
+          action="{{ route('interventions.update', $interv->NumInt) }}">
+        @csrf
 
-    <div class="app">
+        <input type="hidden" name="code_sal_auteur" value="{{ $data->CodeSal ?? 'Utilisateur' }}">
 
-        {{-- GAUCHE --}}
-        <section class="col left">
-            <div class="box hist">
-                <div class="head"><strong>Historique (serveur)</strong><span class="note">résumé</span></div>
-                <div class="body table">
-                    <table>
-                        <thead>
-                        <tr>
-                            <th class="w-150">Date (srv)</th>
-                            <th>Action / Commentaire</th>
-                            <th class="col-icon"></th> {{-- icône info --}}
-                        </tr>
-                        </thead>
-                        <tbody>
-                        @forelse($suivis as $suivi)
-                            @php
-                                $dateTxt='—';
-                                if($suivi->CreatedAt){
-                                    try{
-                                        $dt=\Carbon\Carbon::parse($suivi->CreatedAt);
-                                        $dateTxt=$dt->format($dt->toTimeString()!=='00:00:00'?'d/m/Y H:i':'d/m/Y');
-                                    }catch(\Exception $e){}
-                                }
-                            @endphp
-                            <tr>
-                                <td>{{ $dateTxt }}</td>
-                                <td>
-                                    @if($suivi->CodeSalAuteur)<strong>{{ $suivi->CodeSalAuteur }}</strong> — @endif
-                                    @if($suivi->Titre)<em>{{ $suivi->Titre }}</em> — @endif
-                                    {{ $suivi->Texte }}
-                                </td>
-                                <td class="col-icon">
-                                    <button class="icon-btn info-btn"
-                                            type="button"
-                                            title="Informations suivi"
-                                            aria-label="Informations suivi"
-                                            data-type="suivi"
-                                            data-id="{{ $suivi->id }}">
-                                        i
-                                    </button>
-                                </td>
-                            </tr>
-                        @empty
-                            <tr><td>—</td><td>Aucun suivi</td></tr>
-                        @endforelse
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+        <div class="app">
 
-            <div class="box mserv">
-                <div class="head"><strong>mServ</strong><span class="note">notes internes</span></div>
-                <div class="body">
-                    <div id="noteInterne"
-                         data-update-url="{{ route('interventions.note.update', ['numInt'=>$interv->NumInt]) }}">
-                        {{ $noteInterne }}
-                    </div>
-                    <div class="note-toolbar">
-                        <button id="btnEdit" class="btn" type="button">Modifier</button>
-                        <button id="btnSave" class="btn is-hidden" type="button">Enregistrer</button>
-                        <button id="btnCancel" class="btn is-hidden" type="button">Annuler</button>
-                        <span id="noteCounter" class="note ml-auto"></span>
-                        <span id="noteStatus" class="note"></span>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        {{-- CENTRE : Traitement du dossier --}}
-        <section class="col center">
-            <div class="box">
-                <div class="head">
-                    <strong>Traitement du dossier — {{ $interv->NumInt }}</strong>
-                    <span class="note">{{ $data->NomSal ?? ($data->CodeSal ?? '—') }}</span>
-                </div>
-                <div class="body">
-                    {{-- Objet sur toute la ligne --}}
-                    <div class="gridObj">
-                        <label>Objet</label>
-                        <div class="ro">{{ $objetTrait ?: '—' }}</div>
-                    </div>
-
-                    {{-- Contact réel SEUL (ligne dédiée) --}}
-                    <div class="grid2">
-                        <label>Contact réel</label>
-                        <input type="text" value="{{ $contactReel }}">
-                    </div>
-
-                    {{-- Date + Heure sur la même ligne --}}
-                    <div class="gridRow">
-                        <label>Date</label>
-                        <div id="srvDateText" class="ro">—</div>
-                        <label>Heure</label>
-                        <div id="srvTimeText" class="ro">—</div>
-                    </div>
-
-                    {{-- Checklist TRAITEMENT --}}
-                    <div class="table mt6">
+            {{-- GAUCHE --}}
+            <section class="col left">
+                <div class="box hist">
+                    <div class="head"><strong>Historique (serveur)</strong><span class="note">résumé</span></div>
+                    <div class="body table">
                         <table>
                             <thead>
                             <tr>
-                                <th>Action de traitement</th>
-                                <th class="w-66">Statut</th>
+                                <th class="w-150">Date (srv)</th>
+                                <th>Action / Commentaire</th>
+                                <th class="col-icon"></th> {{-- icône info --}}
                             </tr>
                             </thead>
                             <tbody>
-                            @php $traits = $traitementItems ?? []; @endphp
-                            @forelse($traits as $trait)
+                            @forelse($suivis as $suivi)
+                                @php
+                                    $dateTxt='—';
+                                    if($suivi->CreatedAt){
+                                        try{
+                                            $dt=\Carbon\Carbon::parse($suivi->CreatedAt);
+                                            $dateTxt=$dt->format($dt->toTimeString()!=='00:00:00'?'d/m/Y H:i':'d/m/Y');
+                                        }catch(\Exception $e){}
+                                    }
+                                @endphp
                                 <tr>
-                                    <td>{{ $trait['label'] }}</td>
-                                    <td class="status">
-                                        <input type="checkbox"
-                                               {{ !empty($trait['checked']) ? 'checked' : '' }}
-                                               data-group="TRAITEMENT" data-index="{{ $trait['pos_index'] }}"
-                                               data-code="{{ $trait['code'] }}">
+                                    <td>{{ $dateTxt }}</td>
+                                    <td>
+                                        @if($suivi->CodeSalAuteur)
+                                            <strong>{{ $suivi->CodeSalAuteur }}</strong> —
+                                        @endif
+                                        @if($suivi->Titre)
+                                            <em>{{ $suivi->Titre }}</em> —
+                                        @endif
+                                        {{ $suivi->Texte }}
+                                    </td>
+                                    <td class="col-icon">
+                                        <button class="icon-btn info-btn"
+                                                type="button"
+                                                title="Informations suivi"
+                                                aria-label="Informations suivi"
+                                                data-type="suivi"
+                                                data-id="{{ $suivi->id }}">
+                                            i
+                                        </button>
                                     </td>
                                 </tr>
                             @empty
-                                <tr><td colspan="2" class="note">Aucun item de traitement</td></tr>
+                                <tr>
+                                    <td>—</td>
+                                    <td>Aucun suivi</td>
+                                </tr>
                             @endforelse
                             </tbody>
                         </table>
                     </div>
                 </div>
 
-            </div>
-        </section>
+                <input type="hidden" name="note_interne" id="noteInterneField">
 
-        {{-- DROITE : Affectation + Agenda du technicien --}}
-        <section class="col right">
-            <div class="box">
-                <div class="head"><strong>Affectation du dossier</strong></div>
-                <div class="body">
+                <div class="box mserv">
+                    <div class="head"><strong>mServ</strong><span class="note">notes internes</span></div>
+                    <div class="body">
+                        <div id="noteInterne"
+                             data-update-url="{{ route('interventions.note.update', ['numInt'=>$interv->NumInt]) }}">
+                            {{ $noteInterne }}
+                        </div>
+                        <div class="note-toolbar">
+                            <button id="btnEdit" class="btn" type="button">Modifier</button>
+                            <button id="btnSave" class="btn is-hidden" type="button">Enregistrer</button>
+                            <button id="btnCancel" class="btn is-hidden" type="button">Annuler</button>
+                            <span id="noteCounter" class="note ml-auto"></span>
+                            <span id="noteStatus" class="note"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="box mserv">
+                    <div class="head"><label for="commentaire"><strong>Commentaire</strong></label><span class="note">infos utiles</span>
+                    </div>
+                    <div class="body">
+                        <div>
+                            <input type="text" id="commentaire" name="commentaire">
+                        </div>
+                    </div>
+                </div>
+            </section>
 
-                    <div class="affectationSticky">
-                        {{-- Choix du type --}}
+            {{-- CENTRE : Traitement du dossier --}}
+            <section class="col center">
+                <div class="box">
+                    <div class="head">
+                        <strong>Traitement du dossier — {{ $interv->NumInt }}</strong>
+                        <span class="note">{{ $data->NomSal ?? ($data->CodeSal ?? '—') }}</span>
+                    </div>
+                    <div class="body">
+                        {{-- Objet sur toute la ligne --}}
+                        <div class="gridObj">
+                            <label>Objet</label>
+                            <div class="ro">{{ $objetTrait ?: '—' }}</div>
+                        </div>
+
+                        {{-- Contact réel SEUL (ligne dédiée) --}}
                         <div class="grid2">
-                            <label>Réaffecter à</label>
-                            <div class="hstack-8">
-                                <label class="hstack-6">
-                                    <input type="radio" name="reaType" value="TECH" checked>
-                                    Technicien
-                                </label>
-                                <label class="hstack-6">
-                                    <input type="radio" name="reaType" value="SAL">
-                                    Salarié
-                                </label>
-                            </div>
+                            <label for="contactReel">Contact réel</label>
+                            <input type="text" id="contactReel" name="contact_reel"
+                                   value="{{ old('contact_reel', $contactReel) }}">
                         </div>
 
-                        {{-- Listes (une seule active à la fois) --}}
-                        <div class="grid2" id="rowTech">
-                            <label>Technicien</label>
-                            <select id="selTech">
-                                <option value="">— Sélectionner —</option>
-                                @foreach($techniciens as $technicien)
-                                    <option value="{{ $technicien->CodeSal }}">{{ $technicien->NomSal }} ({{ $technicien->CodeSal }})</option>
-                                @endforeach
-                            </select>
-                        </div>
-
-                        <div class="grid2 is-hidden" id="rowSal">
-                            <label>Salarié</label>
-                            <select id="selSal">
-                                <option value="">— Sélectionner —</option>
-                                @foreach($salaries as $salarie)
-                                    <option value="{{ $salarie->CodeSal }}">{{ $salarie->NomSal }} ({{ $salarie->CodeSal }})</option>
-                                @endforeach
-                            </select>
-                        </div>
-
+                        {{-- Date + Heure sur la même ligne --}}
                         <div class="gridRow">
-                            <label>Date</label><input type="date" id="dtPrev">
-                            <label>Heure</label><input type="time" id="tmPrev" step="300">
+                            <label>Date</label>
+                            <div id="srvDateText" class="ro">—</div>
+                            <label>Heure</label>
+                            <div id="srvTimeText" class="ro">—</div>
                         </div>
 
-                        {{-- Étapes AFFECTATION en 2 colonnes --}}
-                        <div class="table mt8">
+                        {{-- Checklist TRAITEMENT --}}
+                        <div class="table mt6">
                             <table>
                                 <thead>
                                 <tr>
-                                    <th>Étapes de planification</th>
-                                    <th class="w-66">Statut</th>
-                                    <th>Étapes de planification</th>
+                                    <th>Action de traitement</th>
                                     <th class="w-66">Statut</th>
                                 </tr>
                                 </thead>
                                 <tbody>
-                                @php $pairs = array_chunk(($affectationItems ?? []), 2); @endphp
-                                @forelse($pairs as $pair)
+                                @php $traits = $traitementItems ?? []; @endphp
+                                @forelse($traits as $trait)
                                     <tr>
-                                        <td>{{ $pair[0]['label'] ?? '' }}</td>
-                                        <td class="status">@if(isset($pair[0]))
-                                                <input type="checkbox" data-group="AFFECTATION"
-                                                       data-index="{{ $pair[0]['pos_index'] }}"
-                                                       data-code="{{ $pair[0]['code'] }}">
-                                            @endif</td>
-                                        <td>{{ $pair[1]['label'] ?? '' }}</td>
-                                        <td class="status">@if(isset($pair[1]))
-                                                <input type="checkbox" data-group="AFFECTATION"
-                                                        data-index="{{ $pair[1]['pos_index'] }}"
-                                                       data-code="{{ $pair[1]['code'] }}">
-                                            @endif</td>
+                                        <td>{{ $trait['label'] }}</td>
+                                        <td class="status">
+                                            {{-- valeur par défaut 0 si non coché --}}
+                                            <input type="hidden" name="traitement[{{ $trait['code'] }}]" value="0">
+                                            <input type="checkbox"
+                                                   name="traitement[{{ $trait['code'] }}]"
+                                                   value="1"
+                                                {{ !empty($trait['checked']) ? 'checked' : '' }}>
+                                        </td>
                                     </tr>
                                 @empty
-                                    <tr><td colspan="4" class="note">Aucun item d’affectation</td></tr>
+                                    <tr>
+                                        <td colspan="2" class="note">Aucun item de traitement</td>
+                                    </tr>
                                 @endforelse
                                 </tbody>
                             </table>
                         </div>
-
-                        {{-- Bouton sous les étapes --}}
-                        <div class="flex-end-bar">
-                            <button id="btnPlanifier" class="btn ok" type="button">
-                                Valider le prochain rendez-vous
-                            </button>
-                        </div>
                     </div>
-                    <!-- /affectationSticky -->
 
-                    {{-- Agenda du technicien --}}
-                    <div class="box agendaBox" id="agendaBox">
-                        <div class="head">
-                            <strong>Agenda technicien</strong>
-                            <span class="note">vue mensuelle (Tous par défaut)</span>
-                        </div>
-                        <div class="body">
+                </div>
+            </section>
 
-                            {{-- Sélecteur de technicien --}}
+            {{-- DROITE : Affectation + Agenda du technicien --}}
+            <section class="col right">
+                <div class="box">
+                    <div class="head"><strong>Affectation du dossier</strong></div>
+                    <div class="body">
+
+                        <div class="affectationSticky">
+                            {{-- Choix du type --}}
                             <div class="grid2">
-                                <label>Technicien</label>
-                                <select id="selModeTech">
-                                    <option value="_ALL" selected>Tous les techniciens</option>
+                                <label>Réaffecter à</label>
+                                <div class="hstack-8">
+                                    <label class="hstack-6">
+                                        <input type="radio" name="rea_type" value="TECH" checked>
+                                        Technicien
+                                    </label>
+                                    <label class="hstack-6">
+                                        <input type="radio" name="rea_type" value="SAL">
+                                        Salarié
+                                    </label>
+                                </div>
+                            </div>
+
+                            {{-- Listes (une seule active à la fois) --}}
+                            <div class="grid2" id="rowTech">
+                                <label for="selTech">Technicien</label>
+                                <select name="rea_tech" id="selTech">
+                                    <option value="">— Sélectionner —</option>
                                     @foreach($techniciens as $technicien)
-                                        <option value="{{ $technicien->CodeSal }}">{{ $technicien->NomSal }} ({{ $technicien->CodeSal }})</option>
+                                        <option value="{{ $technicien->CodeSal }}">{{ $technicien->NomSal }}
+                                            ({{ $technicien->CodeSal }})
+                                        </option>
                                     @endforeach
                                 </select>
                             </div>
 
-                            {{-- Calendrier + toggle --}}
-                            <div id="calWrap">
-                                <div id="calHead">
-                                    <button id="calPrev" class="btn" type="button">◀</button>
-
-                                    <div id="calHeadMid">
-                                        <div id="calTitle"></div>
-                                        <button id="calToggle" class="btn" type="button" aria-expanded="true">▾ Mois</button>
-                                    </div>
-
-                                    <button id="calNext" class="btn" type="button">▶</button>
-                                </div>
-
-                                {{-- Grille du mois (heat-map) --}}
-                                <div id="calGrid" class="cal-grid"></div>
-
-                                {{-- Liste du jour sélectionné --}}
-                                <div id="calList" class="cal-list is-hidden">
-                                    <div id="calListHead">
-                                        <div id="calListTitle"></div>
-                                        <button id="dayNext" class="btn" type="button" title="Jour suivant">▶</button>
-                                    </div>
-                                    <div id="calListBody" class="table">
-                                        <table>
-                                            <thead>
-                                            <tr>
-                                                <th class="w-80">Heure</th>
-                                                <th class="w-80">Tech</th>
-                                                <th class="w-200">Contact</th>
-                                                <th>Commentaire</th>
-                                                <th class="col-icon"></th> {{-- icône info --}}
-                                            </tr>
-                                            </thead>
-                                            <tbody id="calListRows"></tbody>
-                                        </table>
-                                    </div>
-                                </div>
-
+                            <div class="grid2 is-hidden" id="rowSal">
+                                <label for="selSal">Salarié</label>
+                                <select name="rea_sal" id="selSal">
+                                    <option value="">— Sélectionner —</option>
+                                    @foreach($salaries as $salarie)
+                                        <option value="{{ $salarie->CodeSal }}">{{ $salarie->NomSal }}
+                                            ({{ $salarie->CodeSal }})
+                                        </option>
+                                    @endforeach
+                                </select>
                             </div>
-                            <!-- /calWrap -->
-                        </div>
-                    </div>
 
+                            <div class="gridRow">
+                                <input type="date" id="dtPrev" name="date_rdv">
+                                <input type="time" id="tmPrev" name="heure_rdv" step="300">
+                            </div>
+
+                            {{-- Étapes AFFECTATION en 2 colonnes --}}
+                            <div class="table mt8">
+                                <table>
+                                    <thead>
+                                    <tr>
+                                        <th>Étapes de planification</th>
+                                        <th class="w-66">Statut</th>
+                                        <th>Étapes de planification</th>
+                                        <th class="w-66">Statut</th>
+                                    </tr>
+                                    </thead>
+                                    <tbody>
+                                    @php $pairs = array_chunk(($affectationItems ?? []), 2); @endphp
+                                    @forelse($pairs as $pair)
+                                        <tr>
+                                            <td>{{ $pair[0]['label'] ?? '' }}</td>
+                                            <td class="status">
+                                                @if(isset($pair[0]))
+                                                    <input type="hidden" name="affectation[{{ $pair[0]['code'] }}]"
+                                                           value="0">
+                                                    <input type="checkbox" name="affectation[{{ $pair[0]['code'] }}]"
+                                                           value="1">
+                                                @endif
+                                            </td>
+                                            <td>{{ $pair[1]['label'] ?? '' }}</td>
+                                            <td class="status">
+                                                @if(isset($pair[1]))
+                                                    <input type="hidden" name="affectation[{{ $pair[1]['code'] }}]"
+                                                           value="0">
+                                                    <input type="checkbox" name="affectation[{{ $pair[1]['code'] }}]"
+                                                           value="1">
+                                                @endif
+                                            </td>
+                                        </tr>
+                                    @empty
+                                        <tr>
+                                            <td colspan="4" class="note">Aucun item d’affectation</td>
+                                        </tr>
+                                    @endforelse
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {{-- Bouton sous les étapes --}}
+                            <div class="flex-end-bar">
+                                <button id="btnPlanifier" class="btn ok" type="button">
+                                    Valider le prochain rendez-vous
+                                </button>
+                            </div>
+                        </div>
+                        <!-- /affectationSticky -->
+
+                        {{-- Agenda du technicien --}}
+                        <div class="box agendaBox" id="agendaBox">
+                            <div class="head">
+                                <strong>Agenda technicien</strong>
+                                <span class="note">vue mensuelle (Tous par défaut)</span>
+                            </div>
+                            <div class="body">
+
+                                {{-- Sélecteur de technicien --}}
+                                <div class="grid2">
+                                    <label>Technicien</label>
+                                    <select id="selModeTech">
+                                        <option value="_ALL" selected>Tous les techniciens</option>
+                                        @foreach($techniciens as $technicien)
+                                            <option value="{{ $technicien->CodeSal }}">{{ $technicien->NomSal }}
+                                                ({{ $technicien->CodeSal }})
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </div>
+
+                                {{-- Calendrier + toggle --}}
+                                <div id="calWrap">
+                                    <div id="calHead">
+                                        <button id="calPrev" class="btn" type="button">◀</button>
+
+                                        <div id="calHeadMid">
+                                            <div id="calTitle"></div>
+                                            <button id="calToggle" class="btn" type="button" aria-expanded="true">▾
+                                                Mois
+                                            </button>
+                                        </div>
+
+                                        <button id="calNext" class="btn" type="button">▶</button>
+                                    </div>
+
+                                    {{-- Grille du mois (heat-map) --}}
+                                    <div id="calGrid" class="cal-grid"></div>
+
+                                    {{-- Liste du jour sélectionné --}}
+                                    <div id="calList" class="cal-list is-hidden">
+                                        <div id="calListHead">
+                                            <div id="calListTitle"></div>
+                                            <button id="dayNext" class="btn" type="button" title="Jour suivant">▶
+                                            </button>
+                                        </div>
+                                        <div id="calListBody" class="table">
+                                            <table>
+                                                <thead>
+                                                <tr>
+                                                    <th class="w-80">Heure</th>
+                                                    <th class="w-80">Tech</th>
+                                                    <th class="w-200">Contact</th>
+                                                    <th>Commentaire</th>
+                                                    <th class="col-icon"></th> {{-- icône info --}}
+                                                </tr>
+                                                </thead>
+                                                <tbody id="calListRows"></tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+
+                                </div>
+                                <!-- /calWrap -->
+                            </div>
+                        </div>
+
+                    </div>
                 </div>
-            </div>
-        </section>
-    </div>
+            </section>
+        </div>
+    </form>
 
     <div id="infoModal" class="modal" aria-hidden="true" role="dialog" aria-modal="true">
         <div class="modal-content" role="document">

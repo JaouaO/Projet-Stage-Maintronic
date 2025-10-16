@@ -54,7 +54,7 @@ window.__healthCheck = function(){
 
     // Réaffectation : toggle TECH / SAL + agenda
     // ✅ Réaffectation : seulement l’affichage TECH/SAL (plus de agendaWrap/agendaTech ici)
-    const reaRadios = document.querySelectorAll('input[name="reaType"]');
+    const reaRadios = document.querySelectorAll('input[name="rea_type"]');
     const rowTech = document.getElementById('rowTech');
     const rowSal = document.getElementById('rowSal');
     const selTech = document.getElementById('selTech');
@@ -64,6 +64,9 @@ window.__healthCheck = function(){
     const techMode = mode === 'TECH';
         rowTech.classList.toggle('is-hidden', !techMode);
         rowSal.classList.toggle('is-hidden',  techMode);
+        // désactive le select caché pour éviter qu’il soit posté
+        document.getElementById('selTech')?.toggleAttribute('disabled', !techMode);
+        document.getElementById('selSal')?.toggleAttribute('disabled', techMode);
     if (!techMode && selTech) {
     selTech.value = '';
 }
@@ -462,7 +465,6 @@ window.__healthCheck = function(){
         elNote.setAttribute('contenteditable', on ? 'true' : 'false');
         applyButtonsState(on);
         if (on){
-            statusEl.textContent = 'Édition en cours…';
             elNote.focus();
             updateCounter();
         } else if (counterEl){
@@ -511,6 +513,11 @@ window.__healthCheck = function(){
         }catch(e){ statusEl.textContent = 'Échec de l’enregistrement'; }
     });
 })();
+document.getElementById('interventionForm')?.addEventListener('submit', ()=>{
+    const div = document.getElementById('noteInterne');
+    const hid = document.getElementById('noteInterneField');
+    if (div && hid) hid.value = (div.textContent || '').trim();
+});
 
 // === MODALE (contenu suivi / rdv) ===
 (function(){
@@ -591,3 +598,8 @@ window.__healthCheck = function(){
     // petite API de debug
     window.MODAL = { open, close };
 })();
+
+const form = document.getElementById('interventionForm');
+document.getElementById('btnPlanifier')?.addEventListener('click', () => {
+        form.requestSubmit(); // lance l’événement submit proprement
+});
