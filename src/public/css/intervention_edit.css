@@ -174,3 +174,46 @@ input,select,textarea{ width:100%; padding:7px; border:1px solid var(--line); bo
 /* Boutons (au cas où un reset CSS les cacherait) */
 .note-toolbar .btn { display: inline-flex; align-items: center; }
 
+/* MODALE — version courte et fiable */
+#infoModal{
+    display:none;                 /* masquée par défaut */
+    position:fixed; inset:0;
+    z-index:2147483647;
+    background:rgba(0,0,0,.45);
+}
+#infoModal.is-open{
+    display:grid;                 /* centré */
+    place-items:center;
+}
+#infoModal .modal-content{
+    position:relative;
+    background:#fff;
+    width:min(640px, 92vw);
+    max-height:84vh;
+    overflow:auto;
+    border-radius:8px;
+    padding:16px 18px;
+    box-shadow:0 20px 60px rgba(0,0,0,.25);
+}
+#infoModal .close{
+    position:absolute; top:8px; right:10px;
+    border:0; background:transparent;
+    font-size:22px; line-height:1;
+    color:#666; cursor:pointer;
+}
+#infoModal .close:hover{ color:#000; }
+
+
+
+/* Colonne d'icône minimaliste, légère séparation */
+.col-icon{ width:28px; text-align:center; border-left:1px solid var(--line) }
+
+/* Bouton "i" minuscule et neutre */
+.icon-btn{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:18px; height:18px; border:1px solid var(--line); border-radius:50%;
+    background:#fff; font-size:11px; line-height:1; color:#555; cursor:pointer
+}
+.icon-btn:focus{ outline:2px solid #cfe0ff; outline-offset:1px }
+
+

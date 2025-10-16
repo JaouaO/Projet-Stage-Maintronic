@@ -17,15 +17,16 @@
                         <tr>
                             <th class="w-150">Date (srv)</th>
                             <th>Action / Commentaire</th>
+                            <th class="col-icon"></th> {{-- icône info --}}
                         </tr>
                         </thead>
                         <tbody>
-                        @forelse($suivis as $s)
+                        @forelse($suivis as $suivi)
                             @php
                                 $dateTxt='—';
-                                if($s->CreatedAt){
+                                if($suivi->CreatedAt){
                                     try{
-                                        $dt=\Carbon\Carbon::parse($s->CreatedAt);
+                                        $dt=\Carbon\Carbon::parse($suivi->CreatedAt);
                                         $dateTxt=$dt->format($dt->toTimeString()!=='00:00:00'?'d/m/Y H:i':'d/m/Y');
                                     }catch(\Exception $e){}
                                 }
@@ -33,9 +34,19 @@
                             <tr>
                                 <td>{{ $dateTxt }}</td>
                                 <td>
-                                    @if($s->CodeSalAuteur)<strong>{{ $s->CodeSalAuteur }}</strong> — @endif
-                                    @if($s->Titre)<em>{{ $s->Titre }}</em> — @endif
-                                    {{ $s->Texte }}
+                                    @if($suivi->CodeSalAuteur)<strong>{{ $suivi->CodeSalAuteur }}</strong> — @endif
+                                    @if($suivi->Titre)<em>{{ $suivi->Titre }}</em> — @endif
+                                    {{ $suivi->Texte }}
+                                </td>
+                                <td class="col-icon">
+                                    <button class="icon-btn info-btn"
+                                            type="button"
+                                            title="Informations suivi"
+                                            aria-label="Informations suivi"
+                                            data-type="suivi"
+                                            data-id="{{ $suivi->id }}">
+                                        i
+                                    </button>
                                 </td>
                             </tr>
                         @empty
@@ -102,15 +113,15 @@
                             </tr>
                             </thead>
                             <tbody>
-                            @php $trait = $traitementItems ?? []; @endphp
-                            @forelse($trait as $it)
+                            @php $traits = $traitementItems ?? []; @endphp
+                            @forelse($traits as $trait)
                                 <tr>
-                                    <td>{{ $it['label'] }}</td>
+                                    <td>{{ $trait['label'] }}</td>
                                     <td class="status">
                                         <input type="checkbox"
-                                               {{ !empty($it['checked']) ? 'checked' : '' }}
-                                               data-group="TRAITEMENT" data-index="{{ $it['pos_index'] }}"
-                                               data-code="{{ $it['code'] }}">
+                                               {{ !empty($trait['checked']) ? 'checked' : '' }}
+                                               data-group="TRAITEMENT" data-index="{{ $trait['pos_index'] }}"
+                                               data-code="{{ $trait['code'] }}">
                                     </td>
                                 </tr>
                             @empty
@@ -151,8 +162,8 @@
                             <label>Technicien</label>
                             <select id="selTech">
                                 <option value="">— Sélectionner —</option>
-                                @foreach($techniciens as $t)
-                                    <option value="{{ $t->CodeSal }}">{{ $t->NomSal }} ({{ $t->CodeSal }})</option>
+                                @foreach($techniciens as $technicien)
+                                    <option value="{{ $technicien->CodeSal }}">{{ $technicien->NomSal }} ({{ $technicien->CodeSal }})</option>
                                 @endforeach
                             </select>
                         </div>
@@ -161,8 +172,8 @@
                             <label>Salarié</label>
                             <select id="selSal">
                                 <option value="">— Sélectionner —</option>
-                                @foreach($salaries as $s)
-                                    <option value="{{ $s->CodeSal }}">{{ $s->NomSal }} ({{ $s->CodeSal }})</option>
+                                @foreach($salaries as $salarie)
+                                    <option value="{{ $salarie->CodeSal }}">{{ $salarie->NomSal }} ({{ $salarie->CodeSal }})</option>
                                 @endforeach
                             </select>
                         </div>
@@ -229,8 +240,8 @@
                                 <label>Technicien</label>
                                 <select id="selModeTech">
                                     <option value="_ALL" selected>Tous les techniciens</option>
-                                    @foreach($techniciens as $t)
-                                        <option value="{{ $t->CodeSal }}">{{ $t->NomSal }} ({{ $t->CodeSal }})</option>
+                                    @foreach($techniciens as $technicien)
+                                        <option value="{{ $technicien->CodeSal }}">{{ $technicien->NomSal }} ({{ $technicien->CodeSal }})</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -265,6 +276,7 @@
                                                 <th class="w-80">Tech</th>
                                                 <th class="w-200">Contact</th>
                                                 <th>Commentaire</th>
+                                                <th class="col-icon"></th> {{-- icône info --}}
                                             </tr>
                                             </thead>
                                             <tbody id="calListRows"></tbody>
@@ -282,17 +294,27 @@
         </section>
     </div>
 
+    <div id="infoModal" class="modal" aria-hidden="true" role="dialog" aria-modal="true">
+        <div class="modal-content" role="document">
+            <button type="button" class="close" aria-label="Fermer" id="infoModalClose">×</button>
+            <div id="infoModalBody"></div>
+        </div>
+    </div>
+
     <script>
         window.APP = {
             serverNow: "{{ $serverNow }}",
             sessionId: "{{ session('id') }}",
             apiPlanningRoute: "{{ route('api.planning.tech', ['codeTech' => '__X__']) }}",
             TECHS: @json($techniciens->pluck('CodeSal')->values()),
-            NAMES: @json($techniciens->mapWithKeys(fn($t)=>[$t->CodeSal=>$t->NomSal])),
+            NAMES: @json($techniciens->mapWithKeys(fn($technicien)=>[$technicien->CodeSal=>$technicien->NomSal])),
             techs: @json($techniciens->pluck('CodeSal')->values()),
-            names: @json($techniciens->mapWithKeys(fn($t)=>[$t->CodeSal=>$t->NomSal])),
+            names: @json($techniciens->mapWithKeys(fn($technicien)=>[$technicien->CodeSal=>$technicien->NomSal])),
         };
         window.APP_SESSION_ID = "{{ session('id') }}";
     </script>
-    <script src="{{ asset('js/intervention_edit.js') }}" defer></script>
+
+    @php($v = filemtime(public_path('js/intervention_edit.js')))
+    <script src="{{ asset('js/intervention_edit.js') }}?v={{ $v }}" defer></script>
+
 @endsection

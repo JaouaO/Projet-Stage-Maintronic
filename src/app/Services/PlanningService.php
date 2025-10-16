@@ -1,0 +1,102 @@
+<?php
+
+namespace App\Services;
+
+use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
+
+class PlanningService
+{
+    /**
+     * Retourne le planning technicien (ou _ALL) entre deux dates, ou sur N jours.
+     *
+     * @param string      $codeTech      Code technicien ou "_ALL"
+     * @param string|null $from          YYYY-MM-DD (optionnel)
+     * @param string|null $to            YYYY-MM-DD (optionnel)
+     * @param int|null    $days          Nombre de jours si from/to absents (par défaut 5, borné 1..60)
+     * @param string      $tz            Timezone (par défaut Europe/Paris)
+     * @param array|null  $allowedTechs  Liste blanche de codes techniciens quand $codeTech === "_ALL" (optionnel)
+     * @return array{ok:bool,from:string,to:string,events:array<int,array<string,mixed>>}
+     */
+    public function getPlanning($codeTech, $from = null, $to = null, $days = null, $tz = 'Europe/Paris', $allowedTechs = null)
+    {
+        // 1) Détermine la plage de dates
+        $range = $this->computeRange($from, $to, $days, $tz);
+        $start = $range['start']; // Carbon
+        $end   = $range['end'];   // Carbon
+
+        // 2) Requête unique
+        $q = DB::table('t_planning_technicien as p')
+            ->select(
+                'p.id as rid', 'p.CodeTech',
+                'p.StartDate', 'p.StartTime',
+                'p.EndDate',   'p.EndTime',
+                'p.NumIntRef',
+                'p.Label',
+                'e.contact_reel as Contact'
+            )
+            ->leftJoin('t_actions_etat as e', 'e.NumInt', '=', 'p.NumIntRef')
+            ->whereBetween('p.StartDate', [$start->toDateString(), $end->toDateString()])
+            ->orderBy('p.StartDate')
+            ->orderBy('p.StartTime');
+
+        if ($codeTech !== '_ALL') {
+            $q->where('p.CodeTech', $codeTech);
+        } elseif (is_array($allowedTechs) && !empty($allowedTechs)) {
+            // Optionnel: filtrer _ALL avec une liste blanche
+            $q->whereIn('p.CodeTech', $allowedTechs);
+        }
+
+        $rows = $q->get();
+
+        // 3) Mapping
+        $events = [];
+        foreach ($rows as $r) {
+            $startIso = $r->StartDate . 'T' . ($r->StartTime ?: '00:00:00');
+            $endIso   = !empty($r->EndDate) ? ($r->EndDate . 'T' . ($r->EndTime ?: '00:00:00')) : null;
+
+            $events[] = [
+                'id' => $r->rid,
+                'code_tech'      => $r->CodeTech,
+                'start_datetime' => $startIso,
+                'end_datetime'   => $endIso,
+                'label'          => $r->Label,
+                'num_int'        => $r->NumIntRef,
+                'contact'        => $r->Contact ?: null,
+            ];
+        }
+
+        return [
+            'ok'     => true,
+            'from'   => $start->format('Y-m-d'),
+            'to'     => $end->format('Y-m-d'),
+            'events' => $events,
+        ];
+    }
+
+    /**
+     * Détermine la plage start/end à partir de from/to ou days.
+     * @return array{start:Carbon, end:Carbon}
+     */
+    private function computeRange($from, $to, $days, $tz = 'Europe/Paris')
+    {
+        try {
+            if (!empty($from) && !empty($to)) {
+                $start = Carbon::parse($from, $tz)->startOfDay();
+                $end   = Carbon::parse($to,   $tz)->endOfDay();
+                return ['start' => $start, 'end' => $end];
+            }
+        } catch (\Throwable $e) {
+            // En cas de date invalide, on retombe sur le mode "days"
+        }
+
+        $d = (int) $days;
+        if ($d <= 0)  $d = 5;
+        if ($d > 60)  $d = 60;
+
+        $start = Carbon::now($tz)->startOfDay();
+        $end   = $start->copy()->addDays($d)->endOfDay();
+
+        return ['start' => $start, 'end' => $end];
+    }
+}

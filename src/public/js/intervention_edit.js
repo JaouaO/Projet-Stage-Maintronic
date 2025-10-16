@@ -1,5 +1,40 @@
 ;(() => { /* ... */ })();
 
+// ===== DEBUG CORE =====
+window.__DBG = window.__DBG || {
+    ON: true, // passe à false pour couper les logs
+    pfx: '[INTV]',
+    log(){ if(this.ON) console.log(this.pfx, ...arguments); },
+    warn(){ if(this.ON) console.warn(this.pfx, ...arguments); },
+    err(){ if(this.ON) console.error(this.pfx, ...arguments); },
+    expect(sel, label){
+        const el = document.querySelector(sel);
+        this.log('expect', label || sel, !!el, el);
+        return !!el;
+    }
+};
+
+// Erreurs globales
+window.addEventListener('error', (e)=>{
+    __DBG.err('window.onerror', e?.message, e?.filename, e?.lineno, e?.colno, e?.error);
+});
+window.addEventListener('unhandledrejection', (e)=>{
+    __DBG.err('unhandledrejection', e?.reason);
+});
+
+// Petit “health-check” DOM lancé à la fin du fichier
+window.__healthCheck = function(){
+    __DBG.log('— HEALTH CHECK —');
+    __DBG.expect('#infoModal', 'modal container');
+    __DBG.expect('#infoModalBody', 'modal body');
+    __DBG.expect('.hist table', 'table historique');
+    __DBG.expect('#calGrid', 'agenda calGrid');
+    __DBG.expect('#calListRows', 'agenda list rows');
+    const z = getComputedStyle(document.querySelector('.modal') || document.body).zIndex;
+    __DBG.log('modal z-index =', z);
+};
+
+
 (function () {
     // Horloge (base = heure serveur)
     //const base = new Date("{{ $serverNow }}");
@@ -96,6 +131,8 @@
     data = JSON.parse(txt);
 } catch (e) {
 }
+        __DBG.log('fetchRange', { code, from, to, ok: !!(data && data.ok === true), status: res.status, count: (data && data.events ? data.events.length : 'n/a') });
+
     return {ok: !!(data && data.ok === true), data, status: res.status, body: txt};
 }
 
@@ -213,26 +250,99 @@
 
 
 }
-    function showDay(key, byDay){
-    if (!key) return;
-    const list = (byDay[key]?.items || []).slice()
-    .sort((a,b)=> (a.start_datetime||'').localeCompare(b.start_datetime||''));
-    calListTitle.textContent = `RDV du ${key.split('-').reverse().join('/')}`;
-    const rows = list.map(e=>{
-    const hhmm = hoursOnly(e.start_datetime);
-    const tech = e.code_tech || '';
-    const contact = e.contact || '—';
-    const comment = e.label || '';
-    return `<tr>
-      <td>${hhmm}</td><td>${tech}</td><td>${contact}</td><td>${comment}</td>
-    </tr>`;
-}).join('') || `<tr><td colspan="4" class="note">Aucun rendez-vous</td></tr>`;
-    calListRows.innerHTML = rows;
-        calList.classList.remove('is-hidden');
-        lastShownKey = key;
-}
+        function escapeHtml(s){
+            return String(s ?? '')
+                .replace(/&/g,'&amp;')
+                .replace(/</g,'&lt;')
+                .replace(/>/g,'&gt;')
+                .replace(/"/g,'&quot;')
+                .replace(/'/g,'&#39;');
+        }
 
-    // Prev/Next month
+        function showDay(key, byDay){
+            if (!key) return;
+
+            const list = (byDay[key]?.items || []).slice()
+                .sort((a,b)=> (a.start_datetime||'').localeCompare(b.start_datetime||''));
+
+            calListTitle.textContent = `RDV du ${key.split('-').reverse().join('/')}`;
+
+            const rows = list.map(e=>{
+                const hhmm    = hoursOnly(e.start_datetime);
+                const tech    = e.code_tech || '';
+                const contact = e.contact   || '—';
+                const comment = e.label     || '';
+
+                return `<tr data-row="rdv">
+      <td>${escapeHtml(hhmm)}</td>
+      <td>${escapeHtml(tech)}</td>
+      <td>${escapeHtml(contact)}</td>
+      <td>${escapeHtml(comment)}</td>
+      <td class="col-icon">
+        <button class="icon-btn info-btn"
+                type="button"
+                title="Informations rendez-vous"
+                aria-label="Informations rendez-vous"
+                data-type="rdv"
+                data-id="${e.id ?? ''}"
+                data-heure="${escapeHtml(hhmm)}"
+                data-tech="${escapeHtml(tech)}"
+                data-contact="${escapeHtml(contact)}"
+                data-commentaire="${escapeHtml(comment)}">i</button>
+      </td>
+    </tr>`;
+            }).join('') || `<tr data-row="empty"><td colspan="5" class="note">Aucun rendez-vous</td></tr>`;
+
+            calListRows.innerHTML = rows;
+            ensureInfoButtons(list); // ← sécurise la présence des boutons
+
+            calList.classList.remove('is-hidden');
+            lastShownKey = key;
+
+            __DBG && __DBG.log && __DBG.log(
+                'RDV rows =', calListRows.querySelectorAll('tr[data-row="rdv"]').length,
+                '| buttons =', calListRows.querySelectorAll('.info-btn[data-type="rdv"]').length
+            );
+        }
+
+        function ensureInfoButtons(list){
+            const trs = calListRows.querySelectorAll('tr[data-row="rdv"]');
+            trs.forEach((tr, i) => {
+                if (tr.querySelector('td[colspan]')) return;
+
+                let cell = tr.querySelector('td.col-icon');
+                if (!cell){
+                    cell = document.createElement('td');
+                    cell.className = 'col-icon';
+                    tr.appendChild(cell);
+                }
+
+                if (!cell.querySelector('.info-btn')){
+                    const e   = list[i] || {};
+                    const btn = document.createElement('button');
+                    btn.type  = 'button';
+                    btn.className = 'icon-btn info-btn';
+                    btn.title = 'Informations rendez-vous';
+                    btn.setAttribute('aria-label','Informations rendez-vous');
+                    btn.dataset.type = 'rdv';
+                    btn.dataset.id   = e.id ?? '';
+                    btn.dataset.heure = hoursOnly(e.start_datetime || '');
+                    btn.dataset.tech  = e.code_tech || '';
+                    btn.dataset.contact = e.contact || '—';
+                    btn.dataset.commentaire = e.label || '';
+                    btn.textContent = 'i';
+
+                    // fallback local si la délégation globale ne prend pas
+                    btn.addEventListener('click', function(){
+                        window.__openInfoFromButton && window.__openInfoFromButton(btn);
+                    });
+
+                    cell.appendChild(btn);
+                }
+            });
+        }
+
+        // Prev/Next month
     calPrev?.addEventListener('click', () => {
     view.setMonth(view.getMonth() - 1);
     render();
@@ -289,6 +399,7 @@
 
 // Par défaut : calendrier déplié
     setCollapsed(false);
+        render(); // rafraîchit la grille tout de suite
 
 
     // Initial
@@ -321,113 +432,162 @@
     sizeAgendaBox();
 })();
 
-        const elNote = document.getElementById('noteInterne');
-        if (!elNote) return;
 
-        const btnEdit   = document.getElementById('btnEdit');
-        const btnSave   = document.getElementById('btnSave');
-        const btnCancel = document.getElementById('btnCancel');
-        const statusEl  = document.getElementById('noteStatus');
-        const counterEl = document.getElementById('noteCounter');
+})();
 
-        const updateUrl = elNote.dataset.updateUrl;
-        const csrftoken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-        const sessionId = (window.APP_SESSION_ID || '').toString();
-        const MAX = 1000;
+(function(){
+    const elNote = document.getElementById('noteInterne');
+    if (!elNote) return;
 
-        let initialValue = elNote.textContent;
+    const btnEdit   = document.getElementById('btnEdit');
+    const btnSave   = document.getElementById('btnSave');
+    const btnCancel = document.getElementById('btnCancel');
+    const statusEl  = document.getElementById('noteStatus');
+    const counterEl = document.getElementById('noteCounter');
 
-        function applyButtonsState(on){
-            elNote.classList.toggle('is-editing', on);
-            btnSave .classList.toggle('is-hidden', !on);
-            btnCancel.classList.toggle('is-hidden', !on);
-            btnEdit .classList.toggle('is-hidden',  on);
+    const updateUrl = elNote.dataset.updateUrl;
+    const csrftoken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    const sessionId = (window.APP_SESSION_ID || '').toString();
+    const MAX = 1000;
+
+    let initialValue = elNote.textContent;
+
+    function applyButtonsState(on){
+        elNote.classList.toggle('is-editing', on);
+        btnSave .classList.toggle('is-hidden', !on);
+        btnCancel.classList.toggle('is-hidden', !on);
+        btnEdit .classList.toggle('is-hidden',  on);
+    }
+    function setEditing(on){
+        elNote.setAttribute('contenteditable', on ? 'true' : 'false');
+        applyButtonsState(on);
+        if (on){
+            statusEl.textContent = 'Édition en cours…';
+            elNote.focus();
+            updateCounter();
+        } else if (counterEl){
+            counterEl.textContent = '';
         }
-        function setEditing(on){
-            elNote.setAttribute('contenteditable', on ? 'true' : 'false');
-            applyButtonsState(on);
-            if (on){
-                statusEl.textContent = 'Édition en cours…';
-                elNote.focus();
-                updateCounter();
-            } else if (counterEl){
-                counterEl.textContent = '';
-            }
+    }
+    function getText(){ return (elNote.textContent || '').trim(); }
+    function updateCounter(){
+        if (!counterEl) return;
+        let val = getText();
+        if (val.length > MAX){
+            elNote.textContent = val.slice(0, MAX);
+            placeCaretAtEnd(elNote);
+            val = getText();
         }
+        counterEl.textContent = `${val.length}/${MAX}`;
+    }
+    function placeCaretAtEnd(node){
+        const range = document.createRange();
+        const sel = window.getSelection();
+        range.selectNodeContents(node);
+        range.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(range);
+    }
 
-        function getText(){ return (elNote.textContent || '').trim(); }
+    // init
+    setEditing(false);
+    btnEdit  && btnEdit .addEventListener('click', () => setEditing(true));
+    btnCancel&& btnCancel.addEventListener('click', () => { elNote.textContent = initialValue; setEditing(false); });
+    elNote   && elNote   .addEventListener('input', updateCounter);
+    btnSave  && btnSave  .addEventListener('click', async () => {
+        const newValue = getText();
+        if (newValue.length > MAX){ statusEl.textContent = 'Échec de l’enregistrement (limite 1000 caractères).'; return; }
+        statusEl.textContent = 'Enregistrement…';
+        try{
+            const res = await fetch(updateUrl, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json','Accept': 'application/json','X-CSRF-TOKEN': csrftoken},
+                body: JSON.stringify({ id: sessionId, note: newValue })
+            });
+            const data = await res.json();
+            if (!res.ok || !data || data.ok !== true) throw new Error();
+            initialValue = newValue; statusEl.textContent = 'Enregistré ✔'; setEditing(false);
+            setTimeout(()=> (statusEl.textContent = ''), 1500);
+        }catch(e){ statusEl.textContent = 'Échec de l’enregistrement'; }
+    });
+})();
 
-        function updateCounter(){
-            if (!counterEl) return;
-            let val = getText();
-            if (val.length > MAX){
-                elNote.textContent = val.slice(0, MAX);
-                placeCaretAtEnd(elNote);
-                val = getText();
-            }
-            counterEl.textContent = `${val.length}/${MAX}`;
-            counterEl.style.color = (val.length > MAX * 0.9) ? '#b45309' : '#657089';
-        }
+// === MODALE (contenu suivi / rdv) ===
+(function(){
+    const m    = document.getElementById('infoModal');
+    const body = document.getElementById('infoModalBody');
+    const xBtn = document.getElementById('infoModalClose');
 
-        function placeCaretAtEnd(node){
-            const range = document.createRange();
-            const sel = window.getSelection();
-            range.selectNodeContents(node);
-            range.collapse(false);
-            sel.removeAllRanges();
-            sel.addRange(range);
-        }
+    // --- helpers ---
+    const esc = (s)=>
+        String(s ?? '')
+            .replace(/&/g,'&amp;')
+            .replace(/</g,'&lt;')
+            .replace(/>/g,'&gt;')
+            .replace(/"/g,'&quot;')
+            .replace(/'/g,'&#39;');
 
-        // État initial garanti (lecture seule + bons boutons)
-        setEditing(false);
+    function open(html){
+        if (!m || !body) return;
+        body.innerHTML = html;                  // IMPORTANT: innerHTML (on veut du markup)
+        m.classList.add('is-open');
+        m.setAttribute('aria-hidden','false');
+    }
+    function close(){
+        if (!m || !body) return;
+        m.classList.remove('is-open');
+        m.setAttribute('aria-hidden','true');
+        body.innerHTML = '';                    // on nettoie
+    }
 
-        btnEdit.addEventListener('click', () => setEditing(true));
+    // --- “templates” de contenu ---
+    function renderSuivi(btn){
+        // On remonte à la <tr> et on réutilise la mise en forme existante de la 2e colonne
+        const tr   = btn.closest('tr');
+        const tds  = tr ? tr.children : [];
+        const date = (tds?.[0]?.textContent || '—').trim();
+        const html = (tds?.[1]?.innerHTML   || '').trim(); // conserve <strong>/<em> etc.
 
-        btnCancel.addEventListener('click', () => {
-            elNote.textContent = initialValue;
-            setEditing(false);
-        });
+        return `
+      <h3 style="margin:0 0 10px 0;font-size:16px;">Suivi du ${esc(date)}</h3>
+      <div>${html}</div>
+    `;
+    }
 
-        elNote.addEventListener('input', updateCounter);
+    function renderRDV(btn){
+        const d = btn.dataset || {};
+        return `
+      <h3 style="margin:0 0 10px 0;font-size:16px;">Détail du rendez-vous</h3>
+      <div><strong>Heure&nbsp;:</strong> ${esc(d.heure || '—')}</div>
+      <div><strong>Technicien&nbsp;:</strong> ${esc(d.tech || '—')}</div>
+      <div><strong>Contact&nbsp;:</strong> ${esc(d.contact || '—')}</div>
+      <div style="margin-top:8px;"><strong>Commentaire</strong><br>${esc(d.commentaire || '').replace(/\n/g,'<br>')}</div>
+    `;
+    }
 
-        btnSave.addEventListener('click', async () => {
-            const newValue = getText();
-            if (newValue.length > MAX){
-                statusEl.textContent = 'Échec de l’enregistrement (limite 1000 caractères).';
-                return;
-            }
-            statusEl.textContent = 'Enregistrement…';
-            try{
-                const res = await fetch(updateUrl, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json',
-                        'X-CSRF-TOKEN': csrftoken
-                    },
-                    body: JSON.stringify({ id: sessionId, note: newValue })
-                });
-                const raw = await res.text();
-                let data = null; try{ data = JSON.parse(raw); }catch(_){}
-                if (!res.ok || !data || data.ok !== true){
-                    throw new Error((data && data.msg) || 'Échec de l’enregistrement');
-                }
-                initialValue = newValue;
-                statusEl.textContent = 'Enregistré ✔';
-                setEditing(false);
-                setTimeout(()=> (statusEl.textContent = ''), 1500);
-            }catch(e){
-                statusEl.textContent = 'Échec de l’enregistrement';
-                console.error('Update note failed:', e);
-            }
-        });
+    // --- écoute des clics ---
+    document.addEventListener('click', (e)=>{
+        // fermer si clic sur le fond
+        if (e.target === m) return close();
 
-        // Ctrl/Cmd+S pour sauver uniquement si visible
-        elNote.addEventListener('keydown', (e) => {
-            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-                e.preventDefault();
-                if (!btnSave.classList.contains('is-hidden')) btnSave.click();
-            }
-        });
-    render();
+        // ouvrir si clic sur un bouton info
+        const btn = e.target.closest('.info-btn');
+        if (!btn) return;
+
+        const type = btn.dataset.type; // 'suivi' | 'rdv'
+        if (type === 'suivi') return open(renderSuivi(btn));
+        if (type === 'rdv')   return open(renderRDV(btn));
+
+        // fallback
+        open('<p>Pas de contenu disponible pour ce bouton.</p>');
+    });
+
+    // bouton ×
+    xBtn && xBtn.addEventListener('click', close);
+
+    // ESC
+    document.addEventListener('keydown', (e)=>{ if (e.key === 'Escape') close(); });
+
+    // petite API de debug
+    window.MODAL = { open, close };
 })();
