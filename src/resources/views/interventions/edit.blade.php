@@ -12,11 +12,16 @@
         @csrf
 
         <input type="hidden" name="code_sal_auteur" value="{{ $data->CodeSal ?? 'Utilisateur' }}">
+        <input type="hidden" name="marque" value="{{$interv->Marque ?? ''}}">
+        <input type="hidden" name="objet_trait" value="{{$objetTrait ?? ''}}">
+        <input type="hidden" name="code_postal" value="{{$interv-> CPLivCli ?? ''}}">
+        <input type="hidden" name="ville" value="{{$interv->VilleLivCli ?? ''}}">
+
 
         <div class="app">
 
-            {{-- GAUCHE --}}
-            <section class="col left">
+            <!-- {{-- GAUCHE --}}
+
                 <div class="box hist">
                     <div class="head"><strong>Historique (serveur)</strong><span class="note">résumé</span></div>
                     <div class="body table">
@@ -72,34 +77,10 @@
                     </div>
                 </div>
 
-                <input type="hidden" name="note_interne" id="noteInterneField">
+                -->
 
-                <div class="box mserv">
-                    <div class="head"><strong>mServ</strong><span class="note">notes internes</span></div>
-                    <div class="body">
-                        <div id="noteInterne"
-                             data-update-url="{{ route('interventions.note.update', ['numInt'=>$interv->NumInt]) }}">
-                            {{ $noteInterne }}
-                        </div>
-                        <div class="note-toolbar">
-                            <button id="btnEdit" class="btn" type="button">Modifier</button>
-                            <button id="btnSave" class="btn is-hidden" type="button">Enregistrer</button>
-                            <button id="btnCancel" class="btn is-hidden" type="button">Annuler</button>
-                            <span id="noteCounter" class="note ml-auto"></span>
-                            <span id="noteStatus" class="note"></span>
-                        </div>
-                    </div>
-                </div>
-                <div class="box mserv">
-                    <div class="head"><label for="commentaire"><strong>Commentaire</strong></label><span class="note">infos utiles</span>
-                    </div>
-                    <div class="body">
-                        <div>
-                            <input type="text" id="commentaire" name="commentaire">
-                        </div>
-                    </div>
-                </div>
-            </section>
+
+
 
             {{-- CENTRE : Traitement du dossier --}}
             <section class="col center">
@@ -122,23 +103,18 @@
                                    value="{{ old('contact_reel', $contactReel) }}">
                         </div>
 
-                        {{-- Date + Heure sur la même ligne --}}
-                        <div class="gridRow">
-                            <label>Date</label>
-                            <div id="srvDateText" class="ro">—</div>
-                            <label>Heure</label>
-                            <div id="srvTimeText" class="ro">—</div>
-                        </div>
+                        {{-- Bouton historique (plein largeur, un peu plus visible) --}}
+                        <button id="openHistory"
+                                class="btn btn-history btn-block"
+                                type="button"
+                                data-num-int="{{ $interv->NumInt }}">
+                            Ouvrir l’historique
+                        </button>
+
 
                         {{-- Checklist TRAITEMENT --}}
                         <div class="table mt6">
                             <table>
-                                <thead>
-                                <tr>
-                                    <th>Action de traitement</th>
-                                    <th class="w-66">Statut</th>
-                                </tr>
-                                </thead>
                                 <tbody>
                                 @php $traits = $traitementItems ?? []; @endphp
                                 @forelse($traits as $trait)
@@ -150,7 +126,7 @@
                                             <input type="checkbox"
                                                    name="traitement[{{ $trait['code'] }}]"
                                                    value="1"
-                                                {{ !empty($trait['checked']) ? 'checked' : '' }}>
+                                                {{ old("traitement.{$trait['code']}") === '1' ? 'checked' : '' }}>
                                         </td>
                                     </tr>
                                 @empty
@@ -163,59 +139,124 @@
                         </div>
                     </div>
 
+
+
                 </div>
+
+
+                        {{-- Gabarit HTML injecté dans la nouvelle fenêtre --}}
+                        <template id="tplHistory">
+                            <div class="hist-wrap">
+                                <h2 style="margin:6px 0 12px 0;">Historique du dossier {{ $interv->NumInt }}</h2>
+                                <table class="hist-table" style="width:100%;border-collapse:collapse">
+                                    <thead>
+                                    <tr>
+                                        <th style="width:150px;text-align:left;border-bottom:1px solid #ddd;">Date (srv)</th>
+                                        <th style="text-align:left;border-bottom:1px solid #ddd;">Action / Commentaire (résumé)</th>
+                                        <th style="width:40px;border-bottom:1px solid #ddd;"></th>
+                                    </tr>
+                                    </thead>
+                                    <tbody>
+                                    @forelse($suivis as $suivi)
+                                        @php
+                                            $dateTxt='—';
+                                            if($suivi->CreatedAt){
+                                                try{
+                                                    $dt=\Carbon\Carbon::parse($suivi->CreatedAt);
+                                                    $dateTxt=$dt->format($dt->toTimeString()!=='00:00:00'?'d/m/Y H:i':'d/m/Y');
+                                                }catch(\Exception $e){}
+                                            }
+                                            // résumé = première ligne du texte
+                                            $resume = trim(preg_split('/\R/', (string)$suivi->Texte, 2)[0] ?? '');
+                                        @endphp
+                                        <tr class="row-main" data-row="main" style="border-bottom:1px solid #f0f0f0;">
+                                            <td style="padding:6px 8px;">{{ $dateTxt }}</td>
+                                            <td style="padding:6px 8px;">
+                                                @if($suivi->CodeSalAuteur)<strong>{{ $suivi->CodeSalAuteur }}</strong> — @endif
+                                                @if($suivi->Titre)<em>{{ $suivi->Titre }}</em> — @endif
+                                                {{ $resume }}
+                                            </td>
+                                            <td style="padding:6px 8px;text-align:center;">
+                                                <button class="hist-toggle" type="button" aria-expanded="false" title="Afficher le détail">+</button>
+                                            </td>
+                                        </tr>
+                                        <tr class="row-details" data-row="details" style="display:none;">
+                                            <td colspan="3" style="padding:8px 10px;background:#fafafa;border-bottom:1px solid #eee;">
+                                                {{-- Détail complet (mêmes infos que la modale actuelle) --}}
+                                                @if($suivi->CodeSalAuteur)<div><strong>Auteur :</strong> {{ $suivi->CodeSalAuteur }}</div>@endif
+                                                @if($suivi->Titre)<div><strong>Titre :</strong> <em>{{ $suivi->Titre }}</em></div>@endif
+                                                <div style="margin-top:6px;white-space:pre-wrap;">{{ $suivi->Texte }}</div>
+                                            </td>
+                                        </tr>
+                                    @empty
+                                        <tr><td colspan="3" class="note" style="padding:8px 10px;">Aucun suivi</td></tr>
+                                    @endforelse
+                                    </tbody>
+                                </table>
+                            </div>
+                        </template>
+
+
+
+                <div class="box mserv">
+                    <div class="head"><label for="commentaire"><strong>Commentaire</strong></label><span class="note">infos utiles</span>
+                    </div>
+                    <div class="body">
+                        <div>
+                            <input type="text" id="commentaire" name="commentaire">
+                        </div>
+                    </div>
+                </div>
+
+
+
             </section>
+
+
+
 
             {{-- DROITE : Affectation + Agenda du technicien --}}
             <section class="col right">
                 <div class="box">
-                    <div class="head"><strong>Affectation du dossier</strong></div>
+                    <div class="head">
+                        <strong>Affectation du dossier</strong>
+                          <span id="srvDateTimeText" class="note">—</span>
+                    </div>
                     <div class="body">
 
                         <div class="affectationSticky">
                             {{-- Choix du type --}}
+                            {{-- Affecter à (liste unique) --}}
                             <div class="grid2">
-                                <label>Réaffecter à</label>
-                                <div class="hstack-8">
-                                    <label class="hstack-6">
-                                        <input type="radio" name="rea_type" value="TECH" checked>
-                                        Technicien
-                                    </label>
-                                    <label class="hstack-6">
-                                        <input type="radio" name="rea_type" value="SAL">
-                                        Salarié
-                                    </label>
-                                </div>
-                            </div>
-
-                            {{-- Listes (une seule active à la fois) --}}
-                            <div class="grid2" id="rowTech">
-                                <label for="selTech">Technicien</label>
-                                <select name="rea_tech" id="selTech">
+                                <label for="selAny">Affecter à</label>
+                                <select name="rea_sal" id="selAny">
                                     <option value="">— Sélectionner —</option>
-                                    @foreach($techniciens as $technicien)
-                                        <option value="{{ $technicien->CodeSal }}">{{ $technicien->NomSal }}
-                                            ({{ $technicien->CodeSal }})
-                                        </option>
-                                    @endforeach
-                                </select>
-                            </div>
 
-                            <div class="grid2 is-hidden" id="rowSal">
-                                <label for="selSal">Salarié</label>
-                                <select name="rea_sal" id="selSal">
-                                    <option value="">— Sélectionner —</option>
-                                    @foreach($salaries as $salarie)
-                                        <option value="{{ $salarie->CodeSal }}">{{ $salarie->NomSal }}
-                                            ({{ $salarie->CodeSal }})
-                                        </option>
-                                    @endforeach
+                                    @if(($techniciens ?? collect())->count())
+                                        <optgroup label="Techniciens">
+                                            @foreach($techniciens as $t)
+                                                <option value="{{ $t->CodeSal }}">
+                                                    {{ $t->NomSal }} ({{ $t->CodeSal }})
+                                                </option>
+                                            @endforeach
+                                        </optgroup>
+                                    @endif
+
+                                    @if(($salaries ?? collect())->count())
+                                        <optgroup label="Salariés">
+                                            @foreach($salaries as $s)
+                                                <option value="{{ $s->CodeSal }}">
+                                                    {{ $s->NomSal }} ({{ $s->CodeSal }})
+                                                </option>
+                                            @endforeach
+                                        </optgroup>
+                                    @endif
                                 </select>
                             </div>
 
                             <div class="gridRow">
                                 <input type="date" id="dtPrev" name="date_rdv">
-                                <input type="time" id="tmPrev" name="heure_rdv" step="300">
+                                <input type="time" id="tmPrev" name="heure_rdv">
                             </div>
 
                             {{-- Étapes AFFECTATION en 2 colonnes --}}
@@ -261,14 +302,24 @@
                                 </table>
                             </div>
 
-                            {{-- Bouton sous les étapes --}}
+                            {{-- Boutons sous les étapes --}}
                             <div class="flex-end-bar">
-                                <button id="btnPlanifier" class="btn ok" type="button">
+                                <button id="btnPlanifierAppel" class="btn btn-plan-call btn-sm" type="button">
+                                    Planifier un nouvel appel
+                                </button>
+
+                                <button id="btnPlanifierRdv" class="btn btn-plan-rdv btn-sm" type="button">
+                                    Planifier un rendez-vous
+                                </button>
+
+                                <button id="btnValider" class="btn btn-validate" type="button">
                                     Valider le prochain rendez-vous
                                 </button>
                             </div>
+
+
+                            <!-- /affectationSticky -->
                         </div>
-                        <!-- /affectationSticky -->
 
                         {{-- Agenda du technicien --}}
                         <div class="box agendaBox" id="agendaBox">
@@ -323,7 +374,7 @@
                                                     <th class="w-80">Heure</th>
                                                     <th class="w-80">Tech</th>
                                                     <th class="w-200">Contact</th>
-                                                    <th>Commentaire</th>
+                                                    <th>Label</th>
                                                     <th class="col-icon"></th> {{-- icône info --}}
                                                 </tr>
                                                 </thead>

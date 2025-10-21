@@ -57,3 +57,9 @@ Route::get('/erreur', function () {
 
 Route::get('/api/planning/{codeTech}', [MainController::class,'apiPlanningTech'])
     ->name('api.planning.tech')->middleware('check.session');
+
+
+Route::get('/debugbar-test', function () {
+    \DB::select('SELECT 1');
+    return view('test'); // une vue Blade qui a bien </body>
+});

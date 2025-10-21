@@ -5,9 +5,9 @@ namespace App\Http\Controllers;
 use App\Http\Requests\NotBlankRequest;
 use App\Http\Requests\TextRequest;
 use App\Services\InterventionService;
-use App\Services\NoteService;
 use App\Services\PlanningService;
 use App\Services\TraitementDossierService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use App\Services\AuthService;
 use Illuminate\Support\Facades\DB;
@@ -16,15 +16,13 @@ class MainController extends Controller
 {
     protected $authService;
     protected $interventionService;
-    protected $noteService;
     private $traitementDossierService;
     private $planningService;
 
-    public function __construct(AuthService $authService, InterventionService $interventionService, NoteService $noteService, TraitementDossierService $traitementDossierService, PlanningService $planningService)
+    public function __construct(AuthService $authService, InterventionService $interventionService, TraitementDossierService $traitementDossierService, PlanningService $planningService)
     {
         $this->authService = $authService;
         $this->interventionService = $interventionService;
-        $this->noteService = $noteService;
         $this->traitementDossierService = $traitementDossierService;
         $this->planningService = $planningService;
     }
@@ -78,7 +76,9 @@ class MainController extends Controller
     {
         // Liste légère pour l’autocomplete (adapte la limite si besoin)
         $numints = DB::table('t_intervention')
-            ->orderByDesc('DateEnr')
+            ->orderByDesc('DateIntPrevu')
+            ->orderByDesc('HeureIntPrevu')
+            ->where('CodeTech',null)
             ->limit(500)
             ->pluck('NumInt');
 
@@ -171,78 +171,167 @@ class MainController extends Controller
         }
     }
 
-
-    public function updateInternalNote(Request $request, $numInt)
-    {
-        try {
-            $validated = $request->validate([
-                'id' => ['required', 'string'],
-                'note' => ['nullable', 'string', 'max:1000'],
-            ], [
-                'note.max' => 'Échec de l’enregistrement',
-            ]);
-
-            $exists = DB::table('t_intervention')->where('NumInt', $numInt)->exists();
-            if (!$exists) {
-                return response()->json(['ok' => false, 'msg' => 'Échec de l’enregistrement'], 404);
-            }
-
-            // ✅ écriture via service (cohérence lecture/écriture)
-            $this->noteService->updateInternalNote($numInt, $validated['note']);
-
-            return response()->json(['ok' => true, 'msg' => 'Enregistré ✔']);
-        } catch (\Illuminate\Validation\ValidationException $ve) {
-            return response()->json(['ok' => false, 'msg' => 'Échec de l’enregistrement'], 422);
-        } catch (\Throwable $e) {
-            \Log::error('updateInternalNote failed', [
-                'numInt' => $numInt,
-                'ex' => $e->getMessage(),
-            ]);
-            return response()->json(['ok' => false, 'msg' => 'Échec de l’enregistrement'], 500);
-        }
-    }
-
     public function updateIntervention(Request $request, $numInt)
     {
 
+$items = $request->all();
+dump($items);
+return view('test');
+
+        $commentaire = trim((string)$request->input('commentaire', ''));
+        $contactReel = trim((string)$request->input('contact_reel', ''));
+        $reaSal = $request->input('rea_sal');  // si tu l’as côté SAL
+        $dateRdv = $request->input('date_rdv'); // 'YYYY-MM-DD'
+        $heureRdv = $request->input('heure_rdv'); // 'HH:MM' (ou null)
+        $traitement = (array)$request->input('traitement', []);
+        $affectation = (array)$request->input('affectation', []);
+        $numInt = trim((string)$numInt);
+        $codeSal = $request->input('code_sal_auteur');
+        $codePostal = $request->input('code_postal');
+        $ville = $request->input('ville');
+        $marque = $request->input('marque');
+        $objet_trait = $request->input('objet_trait');
 
 
-        $inputs = $request->except('_token');
 
-        dump($inputs);
-        return view('test');
-
-        $noteInterne  = trim((string) $request->input('note_interne', ''));
-        $commentaire  = trim((string) $request->input('commentaire', ''));
-        $contactReel  = trim((string) $request->input('contact_reel', ''));
-        $reaType      = $request->input('rea_type'); // 'TECH' | 'SAL'
-        $reaTech      = $request->input('rea_tech'); // ex: BETA
-        $reaSal       = $request->input('rea_sal');  // si tu l’as côté SAL
-        $dateRdv      = $request->input('date_rdv'); // 'YYYY-MM-DD'
-        $heureRdv     = $request->input('heure_rdv'); // 'HH:MM' (ou null)
-        $traitement   = (array) $request->input('traitement', []);
-        $affectation  = (array) $request->input('affectation', []);
-        $numInt       = (int) $numInt;
-        $codeSal =$request->input('code_sal_auteur');
+        $isTech  =true;
+        $hasRdv  = !empty($dateRdv) && !empty($heureRdv);
 
 
-        $exists=DB::table('t_suiviclient_histo')->where('NumInt', $numInt)->exists();
-        $data = [
+        $vocab = DB::table('t_actions_vocabulaire')
+            ->orderBy('pos_index')
+            ->get();
 
-            'CommentInterne'=> $noteInterne,
-            'DateIntPrevu'   => $dateRdv,
-            'HeureIntPrevu'  => $heureRdv,     // car heure_rdv était null
-            'CodeTech'       => $reaType=="Tech"?$reaTech:'',
+        $vocabulaire = [
+            'labels' => [],          // clé: "GROUPExINDEX" => label
+            'codes'  => []           // clé: "GROUPE" => [pos_index => code]
         ];
-        if ($exists) {
-            DB::table('t_suiviclient_histo')
-                ->where('NumInt', $numInt)
-                ->update($data);
-        } else {
-            DB::table('t_suiviclient_histo')->insert($data);
+
+        foreach ($vocab as $item) {
+            $vocabulaire['labels'][$item->group_code.$item->pos_index] = $item->label;
+            $vocabulaire['codes'][$item->group_code][(int)$item->pos_index] = $item->code;
         }
 
+        $bitsTraitement  = $this->bitsFromPosted($traitement,  'TRAITEMENT',  $vocabulaire);
+        $bitsAffectation = $this->bitsFromPosted($affectation, 'AFFECTATION', $vocabulaire);
+
+
+
+        //Ajout/Update T_intervention:
+        $data = [
+            'Marque'=>$marque,
+            'DateIntPrevu' => $dateRdv ?? null,
+            'HeureIntPrevu' => $heureRdv ?? null,
+            'CommentInterne' => $noteInterne,
+            'CodeTech' => ($isTech && !empty($reaTech)) ? $reaTech : null,
+            'DateValid' => isset($dateRdv) ? Carbon::now()->toDateString() : null,
+            'HeureValid' => isset($heureRdv) ? Carbon::now()->toTimeString() : null,
+            'CPLivCli'=> $codePostal,
+            'VilleLivCli' => $ville,
+        ];
+
+        DB::table('t_intervention')->updateOrInsert(
+            ['NumInt' => $numInt],
+            $data  // mêmes champs que tu utilises pour update/insert
+        );
+
+
+        //Ajout à t_planning_technicien
+        if ($hasRdv && $isTech && !empty($reaTech)) {
+            $end = Carbon::parse("$dateRdv $heureRdv", 'Europe/Paris')->addHour();
+            $EndDate = $end->toDateString();   // même jour ou +1j si > 23h
+            $EndTime = $end->format('H:i:s');  // heure +1h
+
+            $data = [
+                'CodeTech' => $reaTech,
+                'StartTime' => $heureRdv,
+                'EndTime' => $EndTime,
+                'StartDate' => $dateRdv,
+                'EndDate' => $EndDate,
+                'NumIntRef' => $numInt,
+                'Label' => 'Intervention pour le dossier ' . $numInt,
+                'Commentaire' => $commentaire,
+                'CPLivCli' => $codePostal,
+                'VilleLivCli' => $ville,
+            ];
+
+            DB::table('t_planning_technicien')->insert($data);
+        }
+
+        //Ajout à t_suiviclient_histo
+        $messageTraitement  = $this->traductionBit($vocabulaire, 'TRAITEMENT',  $bitsTraitement);
+
+        DB::table('t_suiviclient_histo')->insert([
+            'NumInt'        => $numInt,
+            'CreatedAt'     => now(),
+            'CodeSalAuteur' =>$codeSal,
+            'Titre'         => $objet_trait,
+            'Texte'         => ($messageTraitement ? "TRAITEMENT : $messageTraitement\n" : '')
+                ."COMMENTAIRE : ".$commentaire,
+        ]);
+
+
+        //t_action_etat
+        $messageAffectation = $this->traductionBit($vocabulaire, 'AFFECTATION', $bitsAffectation);
+        $data = [
+            'bits_traitement' => $bitsTraitement,
+            'bits_affectation' => $bitsAffectation,
+            'objet_traitement' => $messageAffectation,
+            'contact_reel'=>$contactReel,
+        ];
+
+        if(isset($reaSal) && $hasRdv){
+            $data['reaffecte_code'] = $reaSal;
+            $data['rdv_prev_at'] = Carbon::parse("$dateRdv $heureRdv", 'Europe/Paris');
+        }
+        if(isset($reaTech) && $hasRdv){
+            $data['tech_code'] = $reaTech;
+            $data['tech_rdv_at'] = Carbon::parse("$dateRdv $heureRdv", 'Europe/Paris');
+        }
+
+        DB::table('t_actions_etat')->updateOrInsert(
+            ['NumInt' => $numInt],
+            $data
+        );
+
+        return redirect('accueil');
 
     }
+
+
+    private function traductionBit(array $vocabulaire, string $groupeCode, string $bits): string
+    {
+        $index = 0;
+        $traduction = '';
+        foreach (str_split($bits) as $bit) {
+            if ($bit) { // "1" => true ; "0" => false en PHP
+                $key = $groupeCode.$index;
+                $label = $vocabulaire['labels'][$key] ?? null;
+                if ($label) {
+                    $traduction .= ($traduction === '' ? '' : ', ').$label;
+                }
+            }
+            $index++;
+        }
+        return $traduction;
+    }
+
+    private function bitsFromPosted(array $posted, string $group, array $vocabulaire): string
+    {
+        // Tableau: [pos_index => code] pour le groupe demandé
+        $map = $vocabulaire['codes'][$group] ?? [];
+        if (empty($map)) return '';
+
+        $max = (int)max(array_keys($map));
+        $bits = '';
+
+        for ($i = 0; $i <= $max; $i++) {
+            $code = $map[$i] ?? null;
+            $bits .= ($code && isset($posted[$code]) && (string)$posted[$code] === '1') ? '1' : '0';
+        }
+        return $bits;
+    }
+
+
 
 }

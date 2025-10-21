@@ -1,4 +1,4 @@
-;(() => { /* placeholder */ })();
+;(() => { /* ... */ })();
 
 // ===== DEBUG CORE =====
 window.__DBG = window.__DBG || {
@@ -22,62 +22,88 @@ window.addEventListener('unhandledrejection', (e)=>{
     __DBG.err('unhandledrejection', e?.reason);
 });
 
-// Petit “health-check” DOM
+// Petit “health-check” DOM lancé à la fin du fichier
 window.__healthCheck = function(){
     __DBG.log('— HEALTH CHECK —');
     __DBG.expect('#infoModal', 'modal container');
     __DBG.expect('#infoModalBody', 'modal body');
+    __DBG.expect('.hist table', 'table historique');
     __DBG.expect('#calGrid', 'agenda calGrid');
     __DBG.expect('#calListRows', 'agenda list rows');
     const z = getComputedStyle(document.querySelector('.modal') || document.body).zIndex;
     __DBG.log('modal z-index =', z);
 };
 
-// --- Horloge serveur (span #srvDateTimeText) ---
+
 (function () {
+    // Horloge (base = heure serveur)
+    //const base = new Date("{{ $serverNow }}");
     const base = new Date((window.APP && window.APP.serverNow) || Date.now());
     let now = new Date(base.getTime());
     const pad = n => (n < 10 ? '0' : '') + n;
-
-    function draw() {
-        const el = document.getElementById('srvDateTimeText');
-        if (!el) return;
-        const dateTxt = `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()}`;
-        const timeTxt = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
-        el.textContent = `${dateTxt} ${timeTxt}`;
-    }
-
+    const draw = () => {
+        const d = document.getElementById('srvDateText'), t = document.getElementById('srvTimeText');
+        if (d) d.textContent = `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()}`;
+        if (t) t.textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    };
     draw();
     setInterval(() => {
         now = new Date(now.getTime() + 60 * 1000);
         draw();
     }, 60 * 1000);
+
+    // Réaffectation : toggle TECH / SAL + agenda
+    // ✅ Réaffectation : seulement l’affichage TECH/SAL (plus de agendaWrap/agendaTech ici)
+    const reaRadios = document.querySelectorAll('input[name="rea_type"]');
+    const rowTech = document.getElementById('rowTech');
+    const rowSal = document.getElementById('rowSal');
+    const selTech = document.getElementById('selTech');
+
+    function setMode(mode) {
+        if (!rowTech || !rowSal) return; // garde-fou
+        const techMode = mode === 'TECH';
+        rowTech.classList.toggle('is-hidden', !techMode);
+        rowSal.classList.toggle('is-hidden',  techMode);
+        // désactive le select caché pour éviter qu’il soit posté
+        document.getElementById('selTech')?.toggleAttribute('disabled', !techMode);
+        document.getElementById('selSal')?.toggleAttribute('disabled', techMode);
+        if (!techMode && selTech) {
+            selTech.value = '';
+        }
+    }
+
+    reaRadios.forEach(r => r.addEventListener('change', e => setMode(e.target.value)));
+    setMode('TECH');
 })();
 
-// --- Agenda technicien (mois + liste du jour) ---
+
 (function () {
-    const sel         = document.getElementById('selModeTech');
-    const calGrid     = document.getElementById('calGrid');
-    const calTitle    = document.getElementById('calTitle');
-    const calPrev     = document.getElementById('calPrev');
-    const calNext     = document.getElementById('calNext');
-    const calList     = document.getElementById('calList');
-    const calListTitle= document.getElementById('calListTitle');
+    const sel = document.getElementById('selModeTech');
+    const calGrid = document.getElementById('calGrid');
+    const calTitle = document.getElementById('calTitle');
+    const calPrev = document.getElementById('calPrev');
+    const calNext = document.getElementById('calNext');
+    const calList = document.getElementById('calList');
+    const calListTitle = document.getElementById('calListTitle');
     const calListRows = document.getElementById('calListRows');
-    const calWrap     = document.getElementById('calWrap');
-    const calToggle   = document.getElementById('calToggle');
-    const dayNext     = document.getElementById('dayNext');
-    let   lastShownKey= null;
-    let   BYDAY       = {};
+    const calWrap   = document.getElementById('calWrap');
+    const calToggle = document.getElementById('calToggle');
+    let   lastShownKey = null;
+    const dayNext = document.getElementById('dayNext');
+    let   BYDAY = {};   // cache des données par jour (clé 'YYYY-MM-DD' -> {count, items[]})
 
     if (!sel || !calGrid) return;
+
+    // Tech codes (for fallback ALL aggregation)
+    //const TECHS = @json($techniciens->pluck('CodeSal')->values());
+    //const NAMES = Object.fromEntries(@json($techniciens->map(fn($t)=>[$t->CodeSal,$t->NomSal])->values()));
+
 
     const APP        = window.APP || {};
     const TECHS      = APP.techs || [];
     const NAMES      = APP.names || {};
     const API_ROUTE  = APP.apiPlanningRoute || '';
     const SESSION_ID = APP.sessionId || '';
-
     const pad = n => (n < 10 ? '0' : '') + n;
     const ymd = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
     const frMonth = (y, m) => new Date(y, m, 1).toLocaleDateString('fr-FR', {month: 'long', year: 'numeric'});
@@ -86,34 +112,44 @@ window.__healthCheck = function(){
     let view = new Date();
     view.setDate(1);
 
-    // Heat color: green -> red
+    // Heat color from low (green) -> high (red)
     const heat = (val, max) => {
         if (!max) return '#ffffff';
-        const t = Math.max(0, Math.min(1, val / max));
-        const hue = Math.round(120 * (1 - t));
-        const sat = 80, light = 92 - Math.round(35 * t);
+        const t = Math.max(0, Math.min(1, val / max));           // 0..1
+        const hue = Math.round(120 * (1 - t));                    // 120=green -> 0=red
+        const sat = 80, light = 92 - Math.round(35 * t);          // lighter for low counts
         return `hsl(${hue} ${sat}% ${light}%)`;
     };
 
     async function fetchRange(code, from, to) {
+        //const urlBase = `{{ route('api.planning.tech', ['codeTech'=>'__X__']) }}`.replace('__X__', encodeURIComponent(code));
+        //const url = `${urlBase}?from=${from}&to=${to}&id={{ session('id') }}`;
         const urlBase = API_ROUTE.replace('__X__', encodeURIComponent(code));
         const url = `${urlBase}?from=${from}&to=${to}&id=${encodeURIComponent(SESSION_ID)}`;
+
         const res = await fetch(url, {headers: {'Accept': 'application/json'}});
         const txt = await res.text();
         let data = null;
-        try { data = JSON.parse(txt); } catch(e){}
+        try {
+            data = JSON.parse(txt);
+        } catch (e) {
+        }
         __DBG.log('fetchRange', { code, from, to, ok: !!(data && data.ok === true), status: res.status, count: (data && data.events ? data.events.length : 'n/a') });
+
         return {ok: !!(data && data.ok === true), data, status: res.status, body: txt};
     }
 
     async function fetchRangeAll(from, to) {
+        // Try server-side _ALL first
         const tryAll = await fetchRange('_ALL', from, to);
         if (tryAll.ok) return tryAll.data.events || [];
 
+        // Fallback: aggregate in client
         const all = [];
         await Promise.all(TECHS.map(async code => {
             const r = await fetchRange(code, from, to);
             if (r.ok && r.data && Array.isArray(r.data.events)) {
+                // enforce code_tech present
                 r.data.events.forEach(e => {
                     if (!e.code_tech) e.code_tech = code;
                     all.push(e);
@@ -128,23 +164,25 @@ window.__healthCheck = function(){
     function monthBounds(d) {
         const y = d.getFullYear(), m = d.getMonth();
         const first = new Date(y, m, 1);
-        const last = new Date(y, m + 1, 0);
+        const last = new Date(y, m + 1, 0); // last day of month
         return {first, last};
     }
+
     function startOfWeek(d) {
         const r = new Date(d);
         const wd = (r.getDay() + 6) % 7; // Mon=0
         r.setDate(r.getDate() - wd);
         return r;
     }
+
     function addDays(d, n) {
         const r = new Date(d);
         r.setDate(r.getDate() + n);
         return r;
     }
+
     function hoursOnly(iso) {
         const dt = new Date(iso);
-        const pad = n => (n < 10 ? '0' : '') + n;
         return pad(dt.getHours()) + ':' + pad(dt.getMinutes());
     }
 
@@ -159,10 +197,11 @@ window.__healthCheck = function(){
             events = await fetchRangeAll(from, to);
         } else {
             const r = await fetchRange(mode, from, to);
-            events = r.ok ? (r.data.events || []) : [];
+            if (r.ok) events = r.data.events || []; else events = [];
         }
 
-        const byDay = {};
+        // Aggregate count by day
+        const byDay = {}; // 'YYYY-MM-DD' => {count, items[]}
         (events || []).forEach(e => {
             const dkey = (e.start_datetime || '').slice(0, 10);
             if (!dkey) return;
@@ -172,11 +211,12 @@ window.__healthCheck = function(){
         });
         const maxCount = Object.values(byDay).reduce((m, v) => Math.max(m, v.count), 0);
 
+        // Build grid: 7 weekdays header + 6 rows
         const labels = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
         let html = labels.map(w => `<div class="cal-weekday">${w}</div>`).join('');
 
-        const gridStart = startOfWeek(new Date(first));
-        const totalCells = 42;
+        const gridStart = startOfWeek(new Date(first));     // Monday before (or equal) 1st
+        const totalCells = 42;                               // 6 weeks
         for (let i = 0; i < totalCells; i++) {
             const day = addDays(gridStart, i);
             const inMonth = day.getMonth() === view.getMonth();
@@ -191,6 +231,7 @@ window.__healthCheck = function(){
         calGrid.innerHTML = html;
         BYDAY = byDay;
 
+// Click day => show list (via showDay)
         calGrid.querySelectorAll('.cal-cell').forEach(cell=>{
             cell.addEventListener('click', ()=>{
                 const key = cell.getAttribute('data-date');
@@ -198,17 +239,20 @@ window.__healthCheck = function(){
             });
         });
 
+// Persistance de la liste : si un jour est déjà choisi, on le ré-affiche
         if (lastShownKey && byDay[lastShownKey]) {
             showDay(lastShownKey, byDay);
         } else if (calWrap?.classList.contains('collapsed')) {
+            // en mode replié sans sélection -> afficher aujourd'hui (ou 1er jour dispo)
             const todayKey = ymd(new Date());
             const fallbackKey = byDay[todayKey] ? todayKey : Object.keys(byDay).sort()[0];
             if (fallbackKey) showDay(fallbackKey, byDay);
         } else {
-            calList.classList.add('is-hidden');
-        }
-    }
+            // mois déplié et aucune sélection -> on peut masquer la liste
+            calList.classList.add('is-hidden');}
 
+
+    }
     function escapeHtml(s){
         return String(s ?? '')
             .replace(/&/g,'&amp;')
@@ -220,6 +264,7 @@ window.__healthCheck = function(){
 
     function showDay(key, byDay){
         if (!key) return;
+
         const list = (byDay[key]?.items || []).slice()
             .sort((a,b)=> (a.start_datetime||'').localeCompare(b.start_datetime||''));
 
@@ -229,30 +274,30 @@ window.__healthCheck = function(){
             const hhmm    = hoursOnly(e.start_datetime);
             const tech    = e.code_tech || '';
             const contact = e.contact   || '—';
-            const label   = e.label     || '';
+            const label = e.label     || '';
 
             return `<tr data-row="rdv">
-        <td>${escapeHtml(hhmm)}</td>
-        <td>${escapeHtml(tech)}</td>
-        <td>${escapeHtml(contact)}</td>
-        <td>${escapeHtml(label)}</td>
-        <td class="col-icon">
-          <button class="icon-btn info-btn"
-                  type="button"
-                  title="Informations rendez-vous"
-                  aria-label="Informations rendez-vous"
-                  data-type="rdv"
-                  data-id="${e.id ?? ''}"
-                  data-heure="${escapeHtml(hhmm)}"
-                  data-tech="${escapeHtml(tech)}"
-                  data-contact="${escapeHtml(contact)}"
-                  data-label="${escapeHtml(label)}">i</button>
-        </td>
-      </tr>`;
+      <td>${escapeHtml(hhmm)}</td>
+      <td>${escapeHtml(tech)}</td>
+      <td>${escapeHtml(contact)}</td>
+      <td>${escapeHtml(label)}</td>
+      <td class="col-icon">
+        <button class="icon-btn info-btn"
+                type="button"
+                title="Informations rendez-vous"
+                aria-label="Informations rendez-vous"
+                data-type="rdv"
+                data-id="${e.id ?? ''}"
+                data-heure="${escapeHtml(hhmm)}"
+                data-tech="${escapeHtml(tech)}"
+                data-contact="${escapeHtml(contact)}"
+                data-label="${escapeHtml(label)}">i</button>
+      </td>
+    </tr>`;
         }).join('') || `<tr data-row="empty"><td colspan="5" class="note">Aucun rendez-vous</td></tr>`;
 
         calListRows.innerHTML = rows;
-        ensureInfoButtons(list);
+        ensureInfoButtons(list); // ← sécurise la présence des boutons
 
         calList.classList.remove('is-hidden');
         lastShownKey = key;
@@ -301,27 +346,37 @@ window.__healthCheck = function(){
     }
 
     // Prev/Next month
-    calPrev?.addEventListener('click', () => { view.setMonth(view.getMonth() - 1); render(); });
-    calNext?.addEventListener('click', () => { view.setMonth(view.getMonth() + 1); render(); });
+    calPrev?.addEventListener('click', () => {
+        view.setMonth(view.getMonth() - 1);
+        render();
+    });
+    calNext?.addEventListener('click', () => {
+        view.setMonth(view.getMonth() + 1);
+        render();
+    });
 
-    // Change selection
+    // Change selection (ALL by default)
     sel.addEventListener('change', () => render());
 
     function keyToDate(key){ const [y,m,d] = key.split('-').map(Number); return new Date(y, m-1, d); }
 
     async function goNextDay(){
+        // point de départ = jour déjà affiché, sinon aujourd’hui
         const base = lastShownKey ? keyToDate(lastShownKey) : new Date();
         const next = new Date(base.getFullYear(), base.getMonth(), base.getDate()+1);
         const nextKey = ymd(next);
 
+        // si le mois change, on avance la vue puis on re-render avant d'afficher
         const monthChanged = (next.getMonth() !== view.getMonth()) || (next.getFullYear() !== view.getFullYear());
         if (monthChanged){
             view = new Date(next.getFullYear(), next.getMonth(), 1);
-            await render();
+            await render();             // remet à jour BYDAY
         }
-        showDay(nextKey, BYDAY);
+        showDay(nextKey, BYDAY);        // affichera "Aucun rendez-vous" si pas d’items
     }
+
     dayNext?.addEventListener('click', ()=>{ goNextDay(); });
+
 
     function setCollapsed(on){
         if (!calWrap) return;
@@ -330,45 +385,147 @@ window.__healthCheck = function(){
             calToggle.textContent = on ? '▸ Mois' : '▾ Mois';
             calToggle.setAttribute('aria-expanded', (!on).toString());
         }
+        // Si on replie sans sélection en cours, afficher aujourd'hui
         if (on && !lastShownKey) {
-            // fallback via render()
+            const { first } = monthBounds(view);
+            const todayKey = ymd(new Date());
+            // On re-déclenchera showDay après le prochain render()
         }
     }
+
     calToggle?.addEventListener('click', ()=>{
         const on = !calWrap.classList.contains('collapsed');
         setCollapsed(on);
+        // re-render pour recalculer byDay + fallback showDay si besoin
         render();
     });
 
-    // Par défaut : calendrier déplié
+// Par défaut : calendrier déplié
     setCollapsed(false);
-    render();
+    render(); // rafraîchit la grille tout de suite
 
-    // Ajuste la hauteur de la box agenda + empêche le scroll de la page
+
+    // Initial
     (function(){
         const box = document.getElementById('agendaBox');
+
         function sizeAgendaBox(){
             if(!box) return;
             const rect = box.getBoundingClientRect();
-            const gap = 12;
+            const gap = 12; // marge basse, même esprit que tes paddings
             const max = window.innerHeight - rect.top - gap;
             box.style.maxHeight = Math.max(200, max) + 'px';
         }
+
+        // évite que la page scrolle quand on est dans l'agenda
         box?.addEventListener('wheel', (e)=>{
             const el = box;
             const delta = e.deltaY;
             const atTop = el.scrollTop <= 0;
             const atBottom = Math.ceil(el.scrollTop + el.clientHeight) >= el.scrollHeight;
             if ((delta < 0 && !atTop) || (delta > 0 && !atBottom)){
-                e.preventDefault();
+                e.preventDefault();          // on consomme le scroll ici
                 el.scrollTop += delta;
             }
         }, { passive:false });
+
         window.addEventListener('resize', sizeAgendaBox);
+        // petit délai pour laisser le layout se poser (taille sticky dépend du contenu)
         window.addEventListener('load', ()=>setTimeout(sizeAgendaBox, 0));
         sizeAgendaBox();
     })();
+
+
 })();
+
+(function(){
+    const elNote = document.getElementById('noteInterne');
+    if (!elNote) return;
+
+    const btnEdit   = document.getElementById('btnEdit');
+    const btnSave   = document.getElementById('btnSave');
+    const btnCancel = document.getElementById('btnCancel');
+    const statusEl  = document.getElementById('noteStatus');
+    const counterEl = document.getElementById('noteCounter');
+
+    const updateUrl = elNote.dataset.updateUrl;
+    const csrftoken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    const sessionId = (window.APP_SESSION_ID || '').toString();
+    const MAX = 1000;
+
+    let initialValue = elNote.textContent;
+
+    function applyButtonsState(on){
+        elNote.classList.toggle('is-editing', on);
+        btnSave .classList.toggle('is-hidden', !on);
+        btnCancel.classList.toggle('is-hidden', !on);
+        btnEdit .classList.toggle('is-hidden',  on);
+    }
+    function setEditing(on){
+        elNote.setAttribute('contenteditable', on ? 'true' : 'false');
+        applyButtonsState(on);
+        if (on){
+            elNote.focus();
+            updateCounter();
+        } else if (counterEl){
+            counterEl.textContent = '';
+        }
+    }
+    function getText(){ return (elNote.textContent || '').trim(); }
+    function updateCounter(){
+        if (!counterEl) return;
+        let val = getText();
+        if (val.length > MAX){
+            elNote.textContent = val.slice(0, MAX);
+            placeCaretAtEnd(elNote);
+            val = getText();
+        }
+        counterEl.textContent = `${val.length}/${MAX}`;
+    }
+    function placeCaretAtEnd(node){
+        const range = document.createRange();
+        const sel = window.getSelection();
+        range.selectNodeContents(node);
+        range.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(range);
+    }
+
+    // Ctrl/Cmd+S pour sauver uniquement si visible
+    elNote.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+            e.preventDefault();
+            if (!btnSave.classList.contains('is-hidden')) btnSave.click();
+        }
+    });
+
+    // init
+    setEditing(false);
+    btnEdit  && btnEdit .addEventListener('click', () => setEditing(true));
+    btnCancel&& btnCancel.addEventListener('click', () => { elNote.textContent = initialValue; setEditing(false); });
+    elNote   && elNote   .addEventListener('input', updateCounter);
+    btnSave  && btnSave  .addEventListener('click', async () => {
+        const newValue = getText();
+        if (newValue.length > MAX){ statusEl.textContent = 'Échec de l’enregistrement (limite 1000 caractères).'; return; }
+        statusEl.textContent = 'Enregistrement…';
+        try{
+            const res = await fetch(updateUrl, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json','Accept': 'application/json','X-CSRF-TOKEN': csrftoken},
+                body: JSON.stringify({ id: sessionId, note: newValue })
+            });
+            const data = await res.json();
+            if (!res.ok || !data || data.ok !== true) throw new Error();
+            initialValue = newValue; statusEl.textContent = 'Enregistré ✔'; setEditing(false);
+            setTimeout(()=> (statusEl.textContent = ''), 1500);
+        }catch(e){ statusEl.textContent = 'Échec de l’enregistrement'; }
+    });
+})();
+document.getElementById('interventionForm')?.addEventListener('submit', ()=>{
+    const div = document.getElementById('noteInterne');
+    const hid = document.getElementById('noteInterneField');
+    if (div && hid) hid.value = (div.textContent || '').trim();
+});
 
 // === MODALE (contenu suivi / rdv) ===
 (function(){
@@ -376,6 +533,7 @@ window.__healthCheck = function(){
     const body = document.getElementById('infoModalBody');
     const xBtn = document.getElementById('infoModalClose');
 
+    // --- helpers ---
     const esc = (s)=>
         String(s ?? '')
             .replace(/&/g,'&amp;')
@@ -386,7 +544,7 @@ window.__healthCheck = function(){
 
     function open(html){
         if (!m || !body) return;
-        body.innerHTML = html;
+        body.innerHTML = html;                  // IMPORTANT: innerHTML (on veut du markup)
         m.classList.add('is-open');
         m.setAttribute('aria-hidden','false');
     }
@@ -394,19 +552,23 @@ window.__healthCheck = function(){
         if (!m || !body) return;
         m.classList.remove('is-open');
         m.setAttribute('aria-hidden','true');
-        body.innerHTML = '';
+        body.innerHTML = '';                    // on nettoie
     }
 
+    // --- “templates” de contenu ---
     function renderSuivi(btn){
+        // On remonte à la <tr> et on réutilise la mise en forme existante de la 2e colonne
         const tr   = btn.closest('tr');
         const tds  = tr ? tr.children : [];
         const date = (tds?.[0]?.textContent || '—').trim();
-        const html = (tds?.[1]?.innerHTML   || '').trim();
+        const html = (tds?.[1]?.innerHTML   || '').trim(); // conserve <strong>/<em> etc.
+
         return `
       <h3 style="margin:0 0 10px 0;font-size:16px;">Suivi du ${esc(date)}</h3>
       <div>${html}</div>
     `;
     }
+
     function renderRDV(btn){
         const d = btn.dataset || {};
         return `
@@ -418,107 +580,34 @@ window.__healthCheck = function(){
     `;
     }
 
+    // --- écoute des clics ---
     document.addEventListener('click', (e)=>{
+        // fermer si clic sur le fond
         if (e.target === m) return close();
+
+        // ouvrir si clic sur un bouton info
         const btn = e.target.closest('.info-btn');
         if (!btn) return;
-        const type = btn.dataset.type;
+
+        const type = btn.dataset.type; // 'suivi' | 'rdv'
         if (type === 'suivi') return open(renderSuivi(btn));
         if (type === 'rdv')   return open(renderRDV(btn));
+
+        // fallback
         open('<p>Pas de contenu disponible pour ce bouton.</p>');
     });
 
+    // bouton ×
     xBtn && xBtn.addEventListener('click', close);
+
+    // ESC
     document.addEventListener('keydown', (e)=>{ if (e.key === 'Escape') close(); });
+
+    // petite API de debug
     window.MODAL = { open, close };
 })();
 
-// Submit via bouton "Valider le prochain rendez-vous"
-(function(){
-    const form = document.getElementById('interventionForm');
-    document.getElementById('btnValider')?.addEventListener('click', () => {
-        form?.requestSubmit();
-    });
-})();
-
-// === Fenêtre "Historique" (popup) — sans boutons ===
-(function(){
-    const btn = document.getElementById('openHistory');
-    if (!btn) return;
-
-    btn.addEventListener('click', () => {
-        const tpl = document.getElementById('tplHistory');
-        if (!tpl) { console.error('[HIST] template #tplHistory introuvable'); return; }
-
-        const w = window.open('', 'historique_'+Date.now(), 'width=960,height=720');
-        if (!w) { console.error('[HIST] window.open a été bloqué'); return; }
-
-        // Récupère le HTML du template
-        let inner = '';
-        if (tpl.content && tpl.content.cloneNode) {
-            const frag = tpl.content.cloneNode(true);
-            inner = (frag.firstElementChild?.outerHTML || frag.textContent || '').trim();
-        } else {
-            inner = (tpl.innerHTML || '').trim();
-        }
-        if (!inner) {
-            console.error('[HIST] Le template est vide');
-            inner = '<p style="color:#b00">Aucun contenu trouvé pour l’historique.</p>';
-        }
-
-        // Adapter les classes pour réutiliser la feuille CSS existante
-        inner = inner.replace(/class="hist-table"/g, 'class="table"');
-
-        // URL absolue du CSS existant (celui déjà chargé dans la page)
-        const cssHref = document.querySelector('link[rel="stylesheet"][href*="intervention_edit.css"]')?.href || '';
-
-        // Numéro d'intervention via data-num-int du bouton
-        const numInt = btn.dataset.numInt || '';
-        const safeNum = numInt ? String(numInt).replace(/[<>&"]/g, s=>({ '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;' }[s])) : '';
-
-        const html = `
-<!doctype html>
-<html lang="fr">
-<head>
-  <meta charset="utf-8">
-  <title>Historique</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  ${cssHref ? `<link rel="stylesheet" href="${cssHref}">` : ''}
-</head>
-<body>
-  <div class="box" style="margin:12px">
-    <div class="head">
-      <strong>Historique du dossier ${safeNum}</strong>
-    </div>
-    <div class="body">
-      <div class="table">
-        ${inner}
-      </div>
-    </div>
-  </div>
-  <script>
-    console.log('[HIST] popup chargée (CSS externe OK)');
-    document.addEventListener('click', function(e){
-      const btn = e.target.closest('.hist-toggle');
-      if(!btn) return;
-      const tr = btn.closest('tr');
-      const next = tr && tr.nextElementSibling;
-      if(!next || !next.matches('.row-details')) return;
-      const open = next.style.display !== 'none';
-      next.style.display = open ? 'none' : '';
-      btn.textContent = open ? '+' : '−';
-      btn.setAttribute('aria-expanded', (!open).toString());
-    });
-  <\/script>
-</body>
-</html>`;
-
-        try {
-            w.document.open();
-            w.document.write(html);
-            w.document.close();
-        } catch (err) {
-            console.error('[HIST] Erreur écriture document:', err);
-        }
-    });
-})();
+const form = document.getElementById('interventionForm');
+document.getElementById('btnPlanifier')?.addEventListener('click', () => {
+    form.requestSubmit(); // lance l’événement submit proprement
+});

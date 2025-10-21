@@ -11,13 +11,6 @@ class TraitementDossierService
     /** Mémorisation locale pendant la requête */
     private ?Collection $vocabByGroup = null;
 
-    /** @var NoteService */
-    private $noteService;
-
-    public function __construct(NoteService $noteService)
-    {
-        $this->noteService = $noteService;
-    }
 
     /**
      * Charge toutes les données nécessaires à la vue d’édition.
@@ -34,8 +27,6 @@ class TraitementDossierService
             return ['interv' => null];
         }
 
-        // 1) Note interne
-        $noteInterne = $this->noteService->getInternalNote($numInt);
 
         // 2) Vocabulaire (mémo en propriété)
         $vocabByGroup = $this->getVocabByGroup();
@@ -117,11 +108,11 @@ class TraitementDossierService
         $techDate = (!empty($interv->DateIntPrevu) && $interv->DateIntPrevu !== '0000-00-00') ? $interv->DateIntPrevu : '';
         $techTime = (!empty($interv->HeureIntPrevu) && $interv->HeureIntPrevu !== '00:00:00') ? substr($interv->HeureIntPrevu, 0, 5) : '';
 
+
         return [
-            'interv'            => (object) ['NumInt' => $interv->NumInt],
+            'interv'            => $interv,
             'traitementItems'   => $traitementItems,
             'affectationItems'  => $affectationItems,
-            'noteInterne'       => $noteInterne,
             'objetTrait'        => $objetTrait,
             'contactReel'       => $contactReel,
             'salaries'          => $salaries,
