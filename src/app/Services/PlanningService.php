@@ -33,6 +33,7 @@ class PlanningService
                 'p.EndDate',   'p.EndTime',
                 'p.NumIntRef',
                 'p.Label',
+                'p.IsValidated',
                 'e.contact_reel as Contact'
             )
             ->leftJoin('t_actions_etat as e', 'e.NumInt', '=', 'p.NumIntRef')
@@ -63,6 +64,7 @@ class PlanningService
                 'label'          => $r->Label,
                 'num_int'        => $r->NumIntRef,
                 'contact'        => $r->Contact ?: null,
+                'is_validated'   =>  isset($r->IsValidated) ? ((int)$r->IsValidated === 1) : null,
             ];
         }
 

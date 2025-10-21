@@ -108,6 +108,10 @@ input,select,textarea{
 #calListTitle{ margin:4px 0; font-size:12.5px }
 #calList .table thead th, #calList .table td{ padding:6px }
 
+/* Lignes de liste jour : RDV temporaires (non validés) */
+.cal-list tr.temporaire { background: #fff7e6; }     /* orange pâle */
+.cal-list tr.temporaire td { border-color: #ffe2ba; }
+/* tu peux aussi styliser un badge si tu en ajoutes un plus tard */
 
 
 /* ===== Boutons (base compacte) ===== */
@@ -215,6 +219,24 @@ input,select,textarea{
     background:#fff; font-size:11px; line-height:1; color:#555; cursor:pointer;
 }
 .icon-btn:focus{ outline:2px solid #cfe0ff; outline-offset:1px }
+
+/* Ligne Date/Heure : centrée et un peu plus large */
+.right .affectationSticky .gridRow--dt{
+    grid-template-columns: 110px minmax(0, 280px) 80px minmax(0, 220px);
+    /* + de place qu'avant (560px) */
+    max-width: 720px;
+    margin: 6px auto;              /* centre la grille */
+    align-items: center;
+}
+/* Retire les anciennes limites étroites si présentes */
+.right .affectationSticky #dtPrev,
+.right .affectationSticky #tmPrev{
+    max-width: none;
+    width: 100%;
+}
+
+
+
 
 /* ===== Responsive ===== */
 @media (max-width:767px){

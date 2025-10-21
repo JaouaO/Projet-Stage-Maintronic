@@ -44,10 +44,16 @@ Route::get('/interventions/{numInt}', [MainController::class, 'editIntervention'
 Route::post('/interventions/update/{numInt}', [MainController::class, 'updateIntervention'])
     ->name('interventions.update')->middleware('check.session');
 
+Route::post('/interventions/{numInt}/rdv/temporaire',
+    [MainController::class,'rdvTemporaire']
+)->name('interventions.rdv.temporaire')->middleware('check.session');
 
-Route::post('/interventions/{numInt}/note',
-    [MainController::class, 'updateInternalNote']
-)->name('interventions.note.update')->middleware('check.session');
+Route::post(
+    '/interventions/{numInt}/rdv/valider',
+    [MainController::class,'validerRdv']
+)->name('interventions.rdv.valider')->middleware('check.session');
+
+
 
 Route::get('/erreur', function () {
     $message = session('message', 'Une erreur est survenue.');
@@ -58,8 +64,3 @@ Route::get('/erreur', function () {
 Route::get('/api/planning/{codeTech}', [MainController::class,'apiPlanningTech'])
     ->name('api.planning.tech')->middleware('check.session');
 
-
-Route::get('/debugbar-test', function () {
-    \DB::select('SELECT 1');
-    return view('test'); // une vue Blade qui a bien </body>
-});

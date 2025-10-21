@@ -16,7 +16,8 @@
         <input type="hidden" name="objet_trait" value="{{$objetTrait ?? ''}}">
         <input type="hidden" name="code_postal" value="{{$interv-> CPLivCli ?? ''}}">
         <input type="hidden" name="ville" value="{{$interv->VilleLivCli ?? ''}}">
-
+        <input type="hidden" name="rdv_validated_by_ajax" id="rdvValidatedByAjax" value="">
+        <input type="hidden" name="action_type" id="actionType" value="">
 
         <div class="app">
 
@@ -100,6 +101,7 @@
                         <div class="grid2">
                             <label for="contactReel">Contact réel</label>
                             <input type="text" id="contactReel" name="contact_reel"
+                                   maxlength="255"
                                    value="{{ old('contact_reel', $contactReel) }}">
                         </div>
 
@@ -203,7 +205,7 @@
                     </div>
                     <div class="body">
                         <div>
-                            <input type="text" id="commentaire" name="commentaire">
+                            <input type="text" id="commentaire" name="commentaire" maxlength="1000">
                         </div>
                     </div>
                 </div>
@@ -229,7 +231,7 @@
                             {{-- Affecter à (liste unique) --}}
                             <div class="grid2">
                                 <label for="selAny">Affecter à</label>
-                                <select name="rea_sal" id="selAny">
+                                <select name="rea_sal" id="selAny" required>
                                     <option value="">— Sélectionner —</option>
 
                                     @if(($techniciens ?? collect())->count())
@@ -254,10 +256,14 @@
                                 </select>
                             </div>
 
-                            <div class="gridRow">
-                                <input type="date" id="dtPrev" name="date_rdv">
-                                <input type="time" id="tmPrev" name="heure_rdv">
+                            <div class="gridRow gridRow--dt">
+                                <label for="dtPrev">Date</label>
+                                <input type="date" id="dtPrev" name="date_rdv" required>
+
+                                <label for="tmPrev">Heure</label>
+                                <input type="time" id="tmPrev" name="heure_rdv" required>
                             </div>
+
 
                             {{-- Étapes AFFECTATION en 2 colonnes --}}
                             <div class="table mt8">
@@ -362,11 +368,11 @@
 
                                     {{-- Liste du jour sélectionné --}}
                                     <div id="calList" class="cal-list is-hidden">
-                                        <div id="calListHead">
-                                            <div id="calListTitle"></div>
-                                            <button id="dayNext" class="btn" type="button" title="Jour suivant">▶
-                                            </button>
-                                        </div>
+                                            <div id="calListHead">
+                                                <button id="dayPrev" class="btn" type="button" title="Jour précédent" aria-label="Jour précédent">◀</button>
+                                                <div id="calListTitle"></div>
+                                                <button id="dayNext" class="btn" type="button" title="Jour suivant" aria-label="Jour suivant">▶</button>
+                                            </div>
                                         <div id="calListBody" class="table">
                                             <table>
                                                 <thead>

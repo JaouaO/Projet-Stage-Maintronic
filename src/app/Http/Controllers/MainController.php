@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\NotBlankRequest;
 use App\Http\Requests\TextRequest;
+use App\Http\Requests\UpdateInterventionRequest;
 use App\Services\InterventionService;
 use App\Services\PlanningService;
 use App\Services\TraitementDossierService;
@@ -171,12 +172,9 @@ class MainController extends Controller
         }
     }
 
-    public function updateIntervention(Request $request, $numInt)
+    public function updateIntervention(UpdateInterventionRequest $request, $numInt)
     {
 
-$items = $request->all();
-dump($items);
-return view('test');
 
         $commentaire = trim((string)$request->input('commentaire', ''));
         $contactReel = trim((string)$request->input('contact_reel', ''));
@@ -191,10 +189,9 @@ return view('test');
         $ville = $request->input('ville');
         $marque = $request->input('marque');
         $objet_trait = $request->input('objet_trait');
+        $rdvValidatedByAjax = (string)$request->input('rdv_validated_by_ajax','') === '1';
+        $actionType = $request->input('action_type', ''); // 'call' | 'validate_rdv' | ''
 
-
-
-        $isTech  =true;
         $hasRdv  = !empty($dateRdv) && !empty($heureRdv);
 
 
@@ -218,32 +215,60 @@ return view('test');
 
 
         //Ajout/Update T_intervention:
-        $data = [
-            'Marque'=>$marque,
-            'DateIntPrevu' => $dateRdv ?? null,
-            'HeureIntPrevu' => $heureRdv ?? null,
-            'CommentInterne' => $noteInterne,
-            'CodeTech' => ($isTech && !empty($reaTech)) ? $reaTech : null,
-            'DateValid' => isset($dateRdv) ? Carbon::now()->toDateString() : null,
-            'HeureValid' => isset($heureRdv) ? Carbon::now()->toTimeString() : null,
-            'CPLivCli'=> $codePostal,
-            'VilleLivCli' => $ville,
+        $nowParis = \Carbon\Carbon::now('Europe/Paris');
+
+        $dataInterv = [
+            'Marque' => $marque, // si tu veux aussi conditionner, tu peux le faire comme ci-dessous
         ];
+
+// petit helper local
+        $put = static function(array &$arr, string $key, $val): void {
+            if ($val !== null && $val !== '') {
+                $arr[$key] = $val;
+            }
+        };
+
+// On n’affecte un champ que s’il est présent/non vide dans la requête
+        if ($actionType !== 'call') {
+            $put($dataInterv, 'DateIntPrevu',  $dateRdv);
+            $put($dataInterv, 'HeureIntPrevu', $heureRdv);
+            $put($dataInterv, 'CodeTech',      $reaSal);
+
+            if (!empty($dateRdv)) {
+                $dataInterv['DateValid'] = $nowParis->toDateString();
+            }
+            if (!empty($heureRdv)) {
+                $dataInterv['HeureValid'] = $nowParis->format('H:i:s');
+            }
+        }
+        $put($dataInterv, 'CPLivCli',      $codePostal);
+        $put($dataInterv, 'VilleLivCli',   $ville);
+
+
+// Si tu veux aussi éviter d’écraser Marque quand elle est vide :
+        if ($marque === null || $marque === '') {
+            unset($dataInterv['Marque']);
+        }
 
         DB::table('t_intervention')->updateOrInsert(
             ['NumInt' => $numInt],
-            $data  // mêmes champs que tu utilises pour update/insert
+            $dataInterv
         );
 
 
-        //Ajout à t_planning_technicien
-        if ($hasRdv && $isTech && !empty($reaTech)) {
+        $shouldInsertPlanning =
+            ($actionType !== 'call')           // on ne crée PAS de RDV pour un appel
+            && !$rdvValidatedByAjax            // évite doublon si déjà validé via /rdv/valider
+            && $hasRdv
+            && !empty($reaSal);
+
+        if ($shouldInsertPlanning) {
             $end = Carbon::parse("$dateRdv $heureRdv", 'Europe/Paris')->addHour();
             $EndDate = $end->toDateString();   // même jour ou +1j si > 23h
             $EndTime = $end->format('H:i:s');  // heure +1h
 
             $data = [
-                'CodeTech' => $reaTech,
+                'CodeTech' => $reaSal,
                 'StartTime' => $heureRdv,
                 'EndTime' => $EndTime,
                 'StartDate' => $dateRdv,
@@ -253,6 +278,7 @@ return view('test');
                 'Commentaire' => $commentaire,
                 'CPLivCli' => $codePostal,
                 'VilleLivCli' => $ville,
+                'IsValidated'  => 1,
             ];
 
             DB::table('t_planning_technicien')->insert($data);
@@ -263,7 +289,7 @@ return view('test');
 
         DB::table('t_suiviclient_histo')->insert([
             'NumInt'        => $numInt,
-            'CreatedAt'     => now(),
+            'CreatedAt'     => now('Europe/Paris'),
             'CodeSalAuteur' =>$codeSal,
             'Titre'         => $objet_trait,
             'Texte'         => ($messageTraitement ? "TRAITEMENT : $messageTraitement\n" : '')
@@ -284,8 +310,8 @@ return view('test');
             $data['reaffecte_code'] = $reaSal;
             $data['rdv_prev_at'] = Carbon::parse("$dateRdv $heureRdv", 'Europe/Paris');
         }
-        if(isset($reaTech) && $hasRdv){
-            $data['tech_code'] = $reaTech;
+        if(isset($reaSal) && $hasRdv){
+            $data['tech_code'] = $reaSal;
             $data['tech_rdv_at'] = Carbon::parse("$dateRdv $heureRdv", 'Europe/Paris');
         }
 
@@ -298,6 +324,121 @@ return view('test');
 
     }
 
+    public function rdvTemporaire(Request $request, string $numInt)
+    {
+        $data = $request->validate([
+            'rea_sal'   => ['required','string','max:5'],
+            'date_rdv'  => ['required','date_format:Y-m-d'],
+            'heure_rdv' => ['required','date_format:H:i'],
+        ]);
+
+
+        $tech  = $data['rea_sal'];
+        $date  = $data['date_rdv'];
+        $heure = $data['heure_rdv'];
+
+        $start = \Carbon\Carbon::parse("$date $heure",'Europe/Paris');
+        $end   = (clone $start)->addHour();
+
+        $exists = DB::table('t_planning_technicien')
+            ->where([
+                ['NumIntRef', '=', $numInt],
+                ['StartDate', '=', $start->toDateString()],
+                ['StartTime', '=', $start->format('H:i:s')],
+            ])->exists();
+
+        if ($exists) {
+            return response()->json(['ok'=>false, 'msg'=>'Créneau déjà saisi pour ce dossier'], 409);
+        }
+
+        DB::table('t_planning_technicien')->insert([
+            'CodeTech'    => $tech,
+            'StartDate'   => $start->toDateString(),
+            'StartTime'   => $start->format('H:i:s'),
+            'EndDate'     => $end->toDateString(),
+            'EndTime'     => $end->format('H:i:s'),
+            'NumIntRef'   => $numInt,
+            'Label'       => 'Intervention pour le dossier '.$numInt,
+            'Commentaire' => null,
+            'CPLivCli'    => $request->input('code_postal') ?: null,
+            'VilleLivCli' => $request->input('ville') ?: null,
+            'IsValidated' => 0, // RDV temporaire (non validé)
+        ]);
+
+        DB::table('t_intervention')->updateOrInsert(
+            ['NumInt' => $numInt],
+            [
+                'DateIntPrevu'  => $date,
+                'HeureIntPrevu' => $start->format('H:i:s'),
+                'CodeTech'      => $tech,
+            ]
+        );
+
+        return response()->json(['ok'=>true]);
+    }
+
+
+
+    public function validerRdv(Request $request, string $numInt)
+    {
+        $data = $request->validate([
+            'rea_sal'   => ['required','string','max:5'],
+            'date_rdv'  => ['required','date_format:Y-m-d'],
+            'heure_rdv' => ['required','date_format:H:i'],
+        ]);
+
+        $tech   = $data['rea_sal'];
+        $date   = $data['date_rdv'];
+        $heure  = $data['heure_rdv'];
+        $dryRun = $request->boolean('dry_run', false);
+
+        $start  = \Carbon\Carbon::parse("$date $heure",'Europe/Paris');
+        $dateString   = $start->toDateString();       // Y-m-d
+        $timeString   = $start->format('H:i:s');      // H:i:s
+
+        // Existence d’un RDV temporaire (IsValidated = 0 ou NULL) pour même NumInt + date + heure
+        $rdvTemp = DB::table('t_planning_technicien')
+            ->where('NumIntRef', $numInt)
+            ->where('StartDate', $dateString)
+            ->where('StartTime', $timeString)
+            ->where(function($w){
+                $w->whereNull('IsValidated')->orWhere('IsValidated', 0);
+            });
+
+        $exists = $rdvTemp->exists();
+
+        if ($dryRun) {
+            return response()->json(['ok'=>true, 'exists'=>$exists]);
+        }
+
+        if (!$exists) {
+            return response()->json(['ok'=>false, 'exists'=>false], 404);
+        }
+
+        // Valide et actualise le technicien
+        DB::table('t_planning_technicien')
+            ->where('NumIntRef', $numInt)
+            ->where('StartDate', $dateString)
+            ->where('StartTime', $timeString)
+            ->update([
+                'CodeTech'    => $tech,
+                'IsValidated' => 1,
+            ]);
+
+        // Synchronise aussi t_intervention
+        DB::table('t_intervention')->updateOrInsert(
+            ['NumInt' => $numInt],
+            [
+                'DateIntPrevu'  => $dateString,
+                'HeureIntPrevu' => $timeString,
+                'CodeTech'      => $tech,
+                'DateValid'     => now('Europe/Paris')->toDateString(),
+                'HeureValid'    => now('Europe/Paris')->format('H:i:s'),
+            ]
+        );
+
+        return response()->json(['ok'=>true, 'updated'=>true]);
+    }
 
     private function traductionBit(array $vocabulaire, string $groupeCode, string $bits): string
     {

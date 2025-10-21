@@ -67,6 +67,7 @@ window.__healthCheck = function(){
     const calWrap     = document.getElementById('calWrap');
     const calToggle   = document.getElementById('calToggle');
     const dayNext     = document.getElementById('dayNext');
+    const dayPrev     = document.getElementById('dayPrev');
     let   lastShownKey= null;
     let   BYDAY       = {};
 
@@ -229,26 +230,28 @@ window.__healthCheck = function(){
             const hhmm    = hoursOnly(e.start_datetime);
             const tech    = e.code_tech || '';
             const contact = e.contact   || '—';
-            const label   = e.label     || '';
+            const isTemp     = (e.is_validated === false || e.is_validated === 0 || e.is_validated === '0');
+            const labelText  = (isTemp ? '[Temporaire] ' : '') + (e.label || '');
+            const trClass    = isTemp ? ' class="temporaire"' : '';
 
-            return `<tr data-row="rdv">
-        <td>${escapeHtml(hhmm)}</td>
-        <td>${escapeHtml(tech)}</td>
-        <td>${escapeHtml(contact)}</td>
-        <td>${escapeHtml(label)}</td>
-        <td class="col-icon">
-          <button class="icon-btn info-btn"
-                  type="button"
-                  title="Informations rendez-vous"
-                  aria-label="Informations rendez-vous"
-                  data-type="rdv"
-                  data-id="${e.id ?? ''}"
-                  data-heure="${escapeHtml(hhmm)}"
-                  data-tech="${escapeHtml(tech)}"
-                  data-contact="${escapeHtml(contact)}"
-                  data-label="${escapeHtml(label)}">i</button>
-        </td>
-      </tr>`;
+            return `<tr data-row="rdv"${trClass}>
+  <td>${escapeHtml(hhmm)}</td>
+  <td>${escapeHtml(tech)}</td>
+  <td>${escapeHtml(contact)}</td>
+  <td>${escapeHtml(labelText)}</td>
+  <td class="col-icon">
+    <button class="icon-btn info-btn"
+            type="button"
+            title="Informations rendez-vous"
+            aria-label="Informations rendez-vous"
+            data-type="rdv"
+            data-id="${e.id ?? ''}"
+            data-heure="${escapeHtml(hhmm)}"
+            data-tech="${escapeHtml(tech)}"
+            data-contact="${escapeHtml(contact)}"
+            data-label="${escapeHtml(labelText)}">i</button>
+  </td>
+</tr>`;
         }).join('') || `<tr data-row="empty"><td colspan="5" class="note">Aucun rendez-vous</td></tr>`;
 
         calListRows.innerHTML = rows;
@@ -321,7 +324,21 @@ window.__healthCheck = function(){
         }
         showDay(nextKey, BYDAY);
     }
+
+    async function goPrevDay(){
+        const base = lastShownKey ? keyToDate(lastShownKey) : new Date();
+        const prev = new Date(base.getFullYear(), base.getMonth(), base.getDate()-1);
+        const prevKey = ymd(prev);
+        const monthChanged = (prev.getMonth() !== view.getMonth()) || (prev.getFullYear() !== view.getFullYear());
+        if (monthChanged){
+            view = new Date(prev.getFullYear(), prev.getMonth(), 1);
+            await render();
+        }
+        showDay(prevKey, BYDAY);
+    }
+
     dayNext?.addEventListener('click', ()=>{ goNextDay(); });
+    dayPrev?.addEventListener('click', ()=>{ goPrevDay(); });
 
     function setCollapsed(on){
         if (!calWrap) return;
@@ -433,13 +450,208 @@ window.__healthCheck = function(){
     window.MODAL = { open, close };
 })();
 
-// Submit via bouton "Valider le prochain rendez-vous"
+
+
+// Planifier un nouvel appel => pas d'ajout RDV
 (function(){
     const form = document.getElementById('interventionForm');
-    document.getElementById('btnValider')?.addEventListener('click', () => {
-        form?.requestSubmit();
+    const btnCall = document.getElementById('btnPlanifierAppel');
+    const actionType = document.getElementById('actionType');
+
+    if (!form || !btnCall || !actionType) return;
+
+    btnCall.addEventListener('click', () => {
+        actionType.value = 'call';
+        // Optionnel: on ignore date/heure du formulaire pour ne pas laisser croire qu'on va planifier
+        // document.getElementById('dtPrev')?.value = '';
+        // document.getElementById('tmPrev')?.value = '';
+        form.requestSubmit();
     });
 })();
+
+
+
+// Valider le prochain RDV : propose Remplacer / Valider quand même / Modifier avant de valider
+(function(){
+    const form     = document.getElementById('interventionForm');
+    const btn      = document.getElementById('btnValider');
+    const numInt   = document.getElementById('openHistory')?.dataset.numInt || '';
+    const csrf     = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+    // Modale réutilisée
+    const modal    = document.getElementById('infoModal');
+    const modalBody= document.getElementById('infoModalBody');
+    const modalX   = document.getElementById('infoModalClose');
+
+    function openModal(html){
+        if(!modal || !modalBody) return;
+        modalBody.innerHTML = html;
+        modal.classList.add('is-open');
+        modal.setAttribute('aria-hidden','false');
+    }
+    function closeModal(){
+        if(!modal || !modalBody) return;
+        modal.classList.remove('is-open');
+        modal.setAttribute('aria-hidden','true');
+        modalBody.innerHTML = '';
+    }
+    modalX?.addEventListener('click', closeModal);
+
+    if (!btn || !form) return;
+
+    btn.addEventListener('click', async () => {
+        document.getElementById('actionType').value = 'validate_rdv'; // optionnel mais explicite
+        const tech  = document.getElementById('selAny')?.value || '';
+        const date  = document.getElementById('dtPrev')?.value || '';
+        const heure = document.getElementById('tmPrev')?.value || '';
+
+        // Si un des 3 manque → soumission classique
+        if (!numInt || !tech || !date || !heure) {
+            form.requestSubmit();
+            return;
+        }
+
+        // 1) Check existence RDV temporaire identique (dry-run)
+        const urlCheck = `/interventions/${encodeURIComponent(numInt)}/rdv/valider`;
+        try{
+            const r1 = await fetch(urlCheck, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrf,
+                },
+                body: JSON.stringify({
+                    rea_sal: tech,
+                    date_rdv: date,
+                    heure_rdv: heure,
+                    dry_run: true
+                }),
+            });
+            const j1 = await r1.json().catch(()=>({ok:false}));
+            const exists = !!(j1 && j1.ok && j1.exists === true);
+
+            if (!exists) {
+                // → Pas de RDV temporaire : soumission normale
+                form.requestSubmit();
+                return;
+            }
+
+            // 2) RDV temporaire trouvé → pop-up avec 3 choix
+            const html = `
+        <div>
+          <h3 style="margin:0 0 10px 0;font-size:16px;">RDV temporaire détecté</h3>
+          <p>Un RDV <em>temporaire</em> existe déjà pour <strong>${date.split('-').reverse().join('/')}</strong> à <strong>${heure}</strong> sur ce dossier.</p>
+          <p>Que souhaites-tu faire&nbsp;?</p>
+          <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;">
+            <button id="optRemplacer" class="btn ok" type="button" title="Valider et actualiser le RDV existant">Remplacer</button>
+            <button id="optValiderQuandMeme" class="btn" type="button" title="Ne pas toucher au RDV temporaire et valider le formulaire">Valider quand même</button>
+            <button id="optModifier" class="btn" type="button" title="Fermer la fenêtre pour modifier avant de valider">Modifier avant de valider</button>
+          </div>
+        </div>
+      `;
+            openModal(html);
+
+            // 2.a) Remplacer → on valide/actualise côté serveur, puis on submit le formulaire
+            modalBody.querySelector('#optRemplacer')?.addEventListener('click', async ()=>{
+                try{
+                    const r2 = await fetch(urlCheck, {
+                        method: 'POST',
+                        headers: {
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': csrf,
+                        },
+                        body: JSON.stringify({
+                            rea_sal: tech,
+                            date_rdv: date,
+                            heure_rdv: heure,
+                            dry_run: false
+                        }),
+                    });
+                    const j2 = await r2.json().catch(()=>({ok:false}));
+                    if (!r2.ok || !j2.ok) {
+                        alert("Impossible de valider/actualiser le RDV temporaire.");
+                        return;
+                    }
+                    // Flag pour backend (si tu veux éviter un doublon planning dans updateIntervention)
+                    const flag = document.getElementById('rdvValidatedByAjax');
+                    if (flag) flag.value = '1';
+
+                    // Refresh vue agenda et submit
+                    document.getElementById('selModeTech')?.dispatchEvent(new Event('change'));
+                    closeModal();
+                    form.requestSubmit();
+                }catch(e){
+                    console.error('[Valider RDV - Remplacer] erreur', e);
+                    alert("Erreur lors de la validation/actualisation du RDV.");
+                }
+            });
+
+            // 2.b) Valider quand même → on ne touche pas au RDV temporaire, on envoie le formulaire
+            modalBody.querySelector('#optValiderQuandMeme')?.addEventListener('click', ()=>{
+                closeModal();
+                form.requestSubmit();
+            });
+
+            // 2.c) Modifier avant de valider → on ferme, aucun submit
+            modalBody.querySelector('#optModifier')?.addEventListener('click', ()=>{
+                closeModal();
+            });
+
+        }catch(e){
+            console.error('[Valider RDV] erreur', e);
+            // En cas de souci réseau, on retombe sur la validation normale pour ne pas bloquer
+            form.requestSubmit();
+        }
+    });
+})();
+
+
+
+document.getElementById('btnPlanifierRdv')?.addEventListener('click', async () => {
+    document.getElementById('actionType').value = ''; // <- reset
+    const numInt = document.getElementById('openHistory')?.dataset.numInt;
+    const tech   = document.getElementById('selAny')?.value || '';
+    const date   = document.getElementById('dtPrev')?.value || '';
+    const time   = document.getElementById('tmPrev')?.value || '';
+
+    if (!numInt || !tech || !date || !time) {
+        alert('Sélectionne le technicien, la date et l’heure.');
+        return;
+    }
+
+    const url = `/interventions/${encodeURIComponent(numInt)}/rdv/temporaire`;
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': csrf,
+        },
+        body: JSON.stringify({
+            rea_sal: tech,
+            date_rdv: date,
+            heure_rdv: time,
+            code_postal: document.querySelector('input[name="code_postal"]')?.value || null,
+            ville: document.querySelector('input[name="ville"]')?.value || null,
+        }),
+    });
+
+    const out = await res.json().catch(()=>({ok:false}));
+    if (!res.ok || !out.ok) {
+        alert('Erreur lors de la création du RDV temporaire.');
+        return;
+    }
+
+    // Reste sur la page et rafraîchit l’agenda côté client
+    // (force un rerender du mois courant)
+    const ev = new Event('change');
+    document.getElementById('selModeTech')?.dispatchEvent(ev);
+});
+
 
 // === Fenêtre "Historique" (popup) — sans boutons ===
 (function(){
@@ -487,9 +699,6 @@ window.__healthCheck = function(){
 </head>
 <body>
   <div class="box" style="margin:12px">
-    <div class="head">
-      <strong>Historique du dossier ${safeNum}</strong>
-    </div>
     <div class="body">
       <div class="table">
         ${inner}
@@ -521,4 +730,34 @@ window.__healthCheck = function(){
             console.error('[HIST] Erreur écriture document:', err);
         }
     });
+})();
+
+
+(function enforceNoPast(){
+    const d = document.getElementById('dtPrev');
+    const t = document.getElementById('tmPrev');
+
+    if(!d || !t) return;
+
+    // min = aujourd'hui
+    const now = new Date();
+    const pad = n => (n<10?'0':'')+n;
+    const today = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+    const hhmm  = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    d.min = today;
+
+    function applyTimeMin(){
+        // Si la date choisie est aujourd'hui -> min = heure courante, sinon min libre
+        if (d.value === today) {
+            t.min = hhmm;
+            // Si l'heure choisie est passée, on la pousse à maintenant
+            if (t.value && t.value < hhmm) t.value = hhmm;
+        } else {
+            t.removeAttribute('min');
+        }
+    }
+
+    d.addEventListener('change', applyTimeMin);
+    // au chargement
+    applyTimeMin();
 })();
