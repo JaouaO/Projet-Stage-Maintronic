@@ -189,7 +189,6 @@ class MainController extends Controller
         $ville = $request->input('ville');
         $marque = $request->input('marque');
         $objet_trait = $request->input('objet_trait');
-        $rdvValidatedByAjax = (string)$request->input('rdv_validated_by_ajax','') === '1';
         $actionType = $request->input('action_type', ''); // 'call' | 'validate_rdv' | ''
 
         $hasRdv  = !empty($dateRdv) && !empty($heureRdv);
@@ -258,7 +257,6 @@ class MainController extends Controller
 
         $shouldInsertPlanning =
             ($actionType !== 'call')           // on ne crée PAS de RDV pour un appel
-            && !$rdvValidatedByAjax            // évite doublon si déjà validé via /rdv/valider
             && $hasRdv
             && !empty($reaSal);
 
@@ -455,129 +453,41 @@ class MainController extends Controller
             ], 500);
         }
     }
-
-
-
-
-
-    public function validerRdv(Request $request, string $numInt)
+    public function rdvTempCheck(Request $request, string $numInt)
     {
         try {
-            $data = $request->validate([
-                'rea_sal'   => ['required','string','max:5'],
-                'date_rdv'  => ['required','date_format:Y-m-d'],
-                'heure_rdv' => ['required','date_format:H:i'],
-                'commentaire' => ['nullable','string','max:250'],
-                'code_postal' => ['nullable','string','max:10'],
-                'ville'       => ['nullable','string','max:100'],
-            ]);
-
-            $tech        = $data['rea_sal'];
-            $date        = $data['date_rdv'];
-            $heure       = $data['heure_rdv'];
-            $commentaire = trim((string)($data['commentaire'] ?? ''));
-            $cp          = $data['code_postal'] ?? null;
-            $ville       = $data['ville'] ?? null;
-            $dryRun      = $request->boolean('dry_run', false);
-
-            $start = \Carbon\Carbon::parse("$date $heure",'Europe/Paris');
-            $dateString = $start->toDateString();
-            $timeString = $start->format('H:i:s');
-
-            $rdvQuery = DB::table('t_planning_technicien')
+            $rows = DB::table('t_planning_technicien')
                 ->where('NumIntRef', $numInt)
-                ->where('StartDate', $dateString)
-                ->where('StartTime', $timeString)
                 ->where(function($w){
                     $w->whereNull('IsValidated')->orWhere('IsValidated', 0);
-                });
+                })
+                ->orderBy('StartDate')->orderBy('StartTime')
+                ->get(['id','CodeTech','StartDate','StartTime','Label']);
 
-            $exists = $rdvQuery->exists();
-
-            if ($dryRun) {
-                return response()->json(['ok'=>true, 'exists'=>$exists]);
-            }
-            if (!$exists) {
-                return response()->json(['ok'=>false, 'exists'=>false], 404);
-            }
-
-            $labelComment = $commentaire !== '' ? mb_substr($commentaire, 0, 60) : '';
-            $label = trim($numInt . ' -- ' . $labelComment);
-
-            $end = (clone $start)->addHour();
-            $endDate = $end->toDateString();
-            $endTime = $end->format('H:i:s');
-
-            DB::table('t_planning_technicien')
-                ->where('NumIntRef', $numInt)
-                ->where('StartDate', $dateString)
-                ->where('StartTime', $timeString)
-                ->update([
-                    'CodeTech'    => $tech,
-                    'EndDate'     => $endDate,
-                    'EndTime'     => $endTime,
-                    'IsValidated' => 1,
-                    'Label'       => $label,
-                    'Commentaire' => $commentaire ?: null,
-                    'CPLivCli'    => $cp,
-                    'VilleLivCli' => $ville,
-                    ]);
-
-            DB::table('t_intervention')->updateOrInsert(
-                ['NumInt' => $numInt],
-                [
-                    'DateIntPrevu'  => $dateString,
-                    'HeureIntPrevu' => $timeString,
-                    'CodeTech'      => $tech,
-                    'CPLivCli'      => $cp,
-                    'VilleLivCli'   => $ville,
-                    'DateValid'     => now('Europe/Paris')->toDateString(),
-                    'HeureValid'    => now('Europe/Paris')->format('H:i:s'),
-                ]
-            );
-            $evtMeta = [
-                'date'  => $dateString,
-                'heure' => substr($timeString,0,5),
-                'tech'  => $tech,
-                'cp'    => $cp,
-                'ville' => $ville,
-                'label' => $labelComment ?: null,
-            ];
-
-            DB::table('t_suiviclient_histo')->insert([
-                'NumInt'        => $numInt,
-                'CreatedAt'     => now('Europe/Paris'),
-                'CodeSalAuteur' => session('codeSal') ?: null,
-                'Titre'         => 'Validation RDV',
-                'Texte'         => (string)($commentaire ?: ''),
-                'evt_type'      => 'RDV_FIXED',
-                'evt_meta'      => json_encode($evtMeta, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),
+            return response()->json([
+                'ok'    => true,
+                'count' => $rows->count(),
+                'items' => $rows,
             ]);
-
-            return response()->json(['ok'=>true, 'updated'=>true]);
-
-        } catch (\Illuminate\Database\QueryException $qe) {
-            $ei = $qe->errorInfo ?? [];
-            return response()->json([
-                'ok'       => false,
-                'type'     => 'QueryException',
-                'sqlstate' => $ei[0] ?? null,
-                'errno'    => $ei[1] ?? null,
-                'errmsg'   => $ei[2] ?? $qe->getMessage(),
-                'file'     => basename($qe->getFile()) . ':' . $qe->getLine(),
-            ], 500);
-        } catch (\Illuminate\Validation\ValidationException $ve) {
-            return response()->json(['ok'=>false, 'errors'=>$ve->errors()], 422);
         } catch (\Throwable $e) {
-            return response()->json([
-                'ok'     => false,
-                'type'   => 'Throwable',
-                'errmsg' => $e->getMessage(),
-                'file'   => basename($e->getFile()) . ':' . $e->getLine(),
-            ], 500);
+            return response()->json(['ok'=>false, 'msg'=>$e->getMessage()], 500);
         }
     }
 
+    public function rdvTempPurge(Request $request, string $numInt)
+    {
+        try {
+            $deleted = DB::table('t_planning_technicien')
+                ->where('NumIntRef', $numInt)
+                ->where(function($w){
+                    $w->whereNull('IsValidated')->orWhere('IsValidated', 0);
+                })
+                ->delete();
+            return response()->json(['ok'=>true, 'deleted'=>$deleted]);
+        } catch (\Throwable $e) {
+            return response()->json(['ok'=>false, 'msg'=>$e->getMessage()], 500);
+        }
+    }
 
 
     private function traductionBit(array $vocabulaire, string $groupeCode, string $bits): string

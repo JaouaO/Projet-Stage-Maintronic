@@ -1,13 +1,20 @@
-;(() => { /* placeholder */ })();
+;(() => { /* placeholder */
+})();
 
 // ===== DEBUG CORE =====
 window.__DBG = window.__DBG || {
     ON: true, // passe à false pour couper les logs
     pfx: '[INTV]',
-    log(){ if(this.ON) console.log(this.pfx, ...arguments); },
-    warn(){ if(this.ON) console.warn(this.pfx, ...arguments); },
-    err(){ if(this.ON) console.error(this.pfx, ...arguments); },
-    expect(sel, label){
+    log() {
+        if (this.ON) console.log(this.pfx, ...arguments);
+    },
+    warn() {
+        if (this.ON) console.warn(this.pfx, ...arguments);
+    },
+    err() {
+        if (this.ON) console.error(this.pfx, ...arguments);
+    },
+    expect(sel, label) {
         const el = document.querySelector(sel);
         this.log('expect', label || sel, !!el, el);
         return !!el;
@@ -15,15 +22,15 @@ window.__DBG = window.__DBG || {
 };
 
 // Erreurs globales
-window.addEventListener('error', (e)=>{
+window.addEventListener('error', (e) => {
     __DBG.err('window.onerror', e?.message, e?.filename, e?.lineno, e?.colno, e?.error);
 });
-window.addEventListener('unhandledrejection', (e)=>{
+window.addEventListener('unhandledrejection', (e) => {
     __DBG.err('unhandledrejection', e?.reason);
 });
 
 // Petit “health-check” DOM
-window.__healthCheck = function(){
+window.__healthCheck = function () {
     __DBG.log('— HEALTH CHECK —');
     __DBG.expect('#infoModal', 'modal container');
     __DBG.expect('#infoModalBody', 'modal body');
@@ -32,6 +39,34 @@ window.__healthCheck = function(){
     const z = getComputedStyle(document.querySelector('.modal') || document.body).zIndex;
     __DBG.log('modal z-index =', z);
 };
+function withBtnLock(btn, fn){
+    if (!btn) return fn();
+    if (btn.dataset.lock === '1') return;
+    btn.dataset.lock = '1';
+    const prevDisabled = btn.disabled;
+    btn.disabled = true;
+
+    let res;
+    try {
+        res = fn();
+    } catch (e) {
+        btn.dataset.lock = '';
+        btn.disabled = prevDisabled;
+        throw e;
+    }
+
+    if (res && typeof res.then === 'function') {
+        return res.finally(() => {
+            btn.dataset.lock = '';
+            btn.disabled = prevDisabled;
+        });
+    } else {
+        btn.dataset.lock = '';
+        btn.disabled = prevDisabled;
+        return res;
+    }
+}
+
 
 // --- Horloge serveur (span #srvDateTimeText) ---
 (function () {
@@ -56,27 +91,27 @@ window.__healthCheck = function(){
 
 // --- Agenda technicien (mois + liste du jour) ---
 (function () {
-    const sel         = document.getElementById('selModeTech');
-    const calGrid     = document.getElementById('calGrid');
-    const calTitle    = document.getElementById('calTitle');
-    const calPrev     = document.getElementById('calPrev');
-    const calNext     = document.getElementById('calNext');
-    const calList     = document.getElementById('calList');
-    const calListTitle= document.getElementById('calListTitle');
+    const sel = document.getElementById('selModeTech');
+    const calGrid = document.getElementById('calGrid');
+    const calTitle = document.getElementById('calTitle');
+    const calPrev = document.getElementById('calPrev');
+    const calNext = document.getElementById('calNext');
+    const calList = document.getElementById('calList');
+    const calListTitle = document.getElementById('calListTitle');
     const calListRows = document.getElementById('calListRows');
-    const calWrap     = document.getElementById('calWrap');
-    const calToggle   = document.getElementById('calToggle');
-    const dayNext     = document.getElementById('dayNext');
-    const dayPrev     = document.getElementById('dayPrev');
-    let   lastShownKey= null;
-    let   BYDAY       = {};
+    const calWrap = document.getElementById('calWrap');
+    const calToggle = document.getElementById('calToggle');
+    const dayNext = document.getElementById('dayNext');
+    const dayPrev = document.getElementById('dayPrev');
+    let lastShownKey = null;
+    let BYDAY = {};
 
     if (!sel || !calGrid) return;
 
-    const APP        = window.APP || {};
-    const TECHS      = APP.techs || [];
-    const NAMES      = APP.names || {};
-    const API_ROUTE  = APP.apiPlanningRoute || '';
+    const APP = window.APP || {};
+    const TECHS = APP.techs || [];
+    const NAMES = APP.names || {};
+    const API_ROUTE = APP.apiPlanningRoute || '';
     const SESSION_ID = APP.sessionId || '';
 
     const pad = n => (n < 10 ? '0' : '') + n;
@@ -102,8 +137,18 @@ window.__healthCheck = function(){
         const res = await fetch(url, {headers: {'Accept': 'application/json'}});
         const txt = await res.text();
         let data = null;
-        try { data = JSON.parse(txt); } catch(e){}
-        __DBG.log('fetchRange', { code, from, to, ok: !!(data && data.ok === true), status: res.status, count: (data && data.events ? data.events.length : 'n/a') });
+        try {
+            data = JSON.parse(txt);
+        } catch (e) {
+        }
+        __DBG.log('fetchRange', {
+            code,
+            from,
+            to,
+            ok: !!(data && data.ok === true),
+            status: res.status,
+            count: (data && data.events ? data.events.length : 'n/a')
+        });
         return {ok: !!(data && data.ok === true), data, status: res.status, body: txt};
     }
 
@@ -132,17 +177,20 @@ window.__healthCheck = function(){
         const last = new Date(y, m + 1, 0);
         return {first, last};
     }
+
     function startOfWeek(d) {
         const r = new Date(d);
         const wd = (r.getDay() + 6) % 7; // Mon=0
         r.setDate(r.getDate() - wd);
         return r;
     }
+
     function addDays(d, n) {
         const r = new Date(d);
         r.setDate(r.getDate() + n);
         return r;
     }
+
     function hoursOnly(iso) {
         const dt = new Date(iso);
         const pad = n => (n < 10 ? '0' : '') + n;
@@ -192,8 +240,8 @@ window.__healthCheck = function(){
         calGrid.innerHTML = html;
         BYDAY = byDay;
 
-        calGrid.querySelectorAll('.cal-cell').forEach(cell=>{
-            cell.addEventListener('click', ()=>{
+        calGrid.querySelectorAll('.cal-cell').forEach(cell => {
+            cell.addEventListener('click', () => {
                 const key = cell.getAttribute('data-date');
                 showDay(key, byDay);
             });
@@ -210,27 +258,27 @@ window.__healthCheck = function(){
         }
     }
 
-    function escapeHtml(s){
+    function escapeHtml(s) {
         return String(s ?? '')
-            .replace(/&/g,'&amp;')
-            .replace(/</g,'&lt;')
-            .replace(/>/g,'&gt;')
-            .replace(/"/g,'&quot;')
-            .replace(/'/g,'&#39;');
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     }
 
-    function showDay(key, byDay){
+    function showDay(key, byDay) {
         if (!key) return;
         const list = (byDay[key]?.items || []).slice()
-            .sort((a,b)=> (a.start_datetime||'').localeCompare(b.start_datetime||''));
+            .sort((a, b) => (a.start_datetime || '').localeCompare(b.start_datetime || ''));
 
         calListTitle.textContent = `RDV du ${key.split('-').reverse().join('/')}`;
 
-        const rows = list.map(e=>{
-            const hhmm    = hoursOnly(e.start_datetime);
-            const tech    = e.code_tech || '';
-            const contact = e.contact   || '—';
-            const isTemp     = (e.is_validated === false || e.is_validated === 0 || e.is_validated === '0');
+        const rows = list.map(e => {
+            const hhmm = hoursOnly(e.start_datetime);
+            const tech = e.code_tech || '';
+            const contact = e.contact || '—';
+            const isTemp = (e.is_validated === false || e.is_validated === 0 || e.is_validated === '0');
             const labelText = (e.label || '');
             const badge = isTemp ? '<span class="badge badge-temp" aria-label="Rendez-vous temporaire">Temporaire</span>'
                 : '<span class="badge badge-valid" aria-label="Rendez-vous validé">Validé</span>';
@@ -261,7 +309,7 @@ window.__healthCheck = function(){
         data-cp="${escapeHtml(e.cp || '')}"
         data-marque="${escapeHtml(e.marque || '')}"
         data-commentaire="${escapeHtml(e.commentaire || '')}"
-        data-temp="${isTemp ? '1':'0'}"
+        data-temp="${isTemp ? '1' : '0'}"
       >i</button>
     </td>
   </tr>`;
@@ -279,29 +327,29 @@ window.__healthCheck = function(){
         );
     }
 
-    function ensureInfoButtons(list){
+    function ensureInfoButtons(list) {
         const trs = calListRows.querySelectorAll('tr[data-row="rdv"]');
         trs.forEach((tr, i) => {
             if (tr.querySelector('td[colspan]')) return;
 
             let cell = tr.querySelector('td.col-icon');
-            if (!cell){
+            if (!cell) {
                 cell = document.createElement('td');
                 cell.className = 'col-icon';
                 tr.appendChild(cell);
             }
 
-            if (!cell.querySelector('.info-btn')){
-                const e   = list[i] || {};
+            if (!cell.querySelector('.info-btn')) {
+                const e = list[i] || {};
                 const btn = document.createElement('button');
-                btn.type  = 'button';
+                btn.type = 'button';
                 btn.className = 'icon-btn info-btn';
                 btn.title = 'Informations rendez-vous';
-                btn.setAttribute('aria-label','Informations rendez-vous');
+                btn.setAttribute('aria-label', 'Informations rendez-vous');
                 btn.dataset.type = 'rdv';
-                btn.dataset.id   = e.id ?? '';
+                btn.dataset.id = e.id ?? '';
                 btn.dataset.heure = hoursOnly(e.start_datetime || '');
-                btn.dataset.tech  = e.code_tech || '';
+                btn.dataset.tech = e.code_tech || '';
                 btn.dataset.contact = e.contact || '—';
                 btn.dataset.label = e.label || '';
                 btn.textContent = 'i';
@@ -312,7 +360,7 @@ window.__healthCheck = function(){
                 btn.dataset.temp = (e.is_validated === true ? '0' : '1');
 
                 // fallback local si la délégation globale ne prend pas
-                btn.addEventListener('click', function(){
+                btn.addEventListener('click', function () {
                     window.__openInfoFromButton && window.__openInfoFromButton(btn);
                 });
 
@@ -322,46 +370,59 @@ window.__healthCheck = function(){
     }
 
     // Prev/Next month
-    calPrev?.addEventListener('click', () => { view.setMonth(view.getMonth() - 1); render(); });
-    calNext?.addEventListener('click', () => { view.setMonth(view.getMonth() + 1); render(); });
+    calPrev?.addEventListener('click', () => {
+        view.setMonth(view.getMonth() - 1);
+        render();
+    });
+    calNext?.addEventListener('click', () => {
+        view.setMonth(view.getMonth() + 1);
+        render();
+    });
 
     // Change selection
     sel.addEventListener('change', () => render());
 
-    function keyToDate(key){ const [y,m,d] = key.split('-').map(Number); return new Date(y, m-1, d); }
+    function keyToDate(key) {
+        const [y, m, d] = key.split('-').map(Number);
+        return new Date(y, m - 1, d);
+    }
 
-    async function goNextDay(){
+    async function goNextDay() {
         const base = lastShownKey ? keyToDate(lastShownKey) : new Date();
-        const next = new Date(base.getFullYear(), base.getMonth(), base.getDate()+1);
+        const next = new Date(base.getFullYear(), base.getMonth(), base.getDate() + 1);
         const nextKey = ymd(next);
 
         const monthChanged = (next.getMonth() !== view.getMonth()) || (next.getFullYear() !== view.getFullYear());
-        if (monthChanged){
+        if (monthChanged) {
             view = new Date(next.getFullYear(), next.getMonth(), 1);
             await render();
         }
         showDay(nextKey, BYDAY);
     }
 
-    async function goPrevDay(){
+    async function goPrevDay() {
         const base = lastShownKey ? keyToDate(lastShownKey) : new Date();
-        const prev = new Date(base.getFullYear(), base.getMonth(), base.getDate()-1);
+        const prev = new Date(base.getFullYear(), base.getMonth(), base.getDate() - 1);
         const prevKey = ymd(prev);
         const monthChanged = (prev.getMonth() !== view.getMonth()) || (prev.getFullYear() !== view.getFullYear());
-        if (monthChanged){
+        if (monthChanged) {
             view = new Date(prev.getFullYear(), prev.getMonth(), 1);
             await render();
         }
         showDay(prevKey, BYDAY);
     }
 
-    dayNext?.addEventListener('click', ()=>{ goNextDay(); });
-    dayPrev?.addEventListener('click', ()=>{ goPrevDay(); });
+    dayNext?.addEventListener('click', () => {
+        goNextDay();
+    });
+    dayPrev?.addEventListener('click', () => {
+        goPrevDay();
+    });
 
-    function setCollapsed(on){
+    function setCollapsed(on) {
         if (!calWrap) return;
         calWrap.classList.toggle('collapsed', !!on);
-        if (calToggle){
+        if (calToggle) {
             calToggle.textContent = on ? '▸ Mois' : '▾ Mois';
             calToggle.setAttribute('aria-expanded', (!on).toString());
         }
@@ -369,7 +430,8 @@ window.__healthCheck = function(){
             // fallback via render()
         }
     }
-    calToggle?.addEventListener('click', ()=>{
+
+    calToggle?.addEventListener('click', () => {
         const on = !calWrap.classList.contains('collapsed');
         setCollapsed(on);
         render();
@@ -380,77 +442,81 @@ window.__healthCheck = function(){
     render();
 
     // Ajuste la hauteur de la box agenda + empêche le scroll de la page
-    (function(){
+    (function () {
         const box = document.getElementById('agendaBox');
-        function sizeAgendaBox(){
-            if(!box) return;
+
+        function sizeAgendaBox() {
+            if (!box) return;
             const rect = box.getBoundingClientRect();
             const gap = 12;
             const max = window.innerHeight - rect.top - gap;
             box.style.maxHeight = Math.max(200, max) + 'px';
         }
-        box?.addEventListener('wheel', (e)=>{
+
+        box?.addEventListener('wheel', (e) => {
             const el = box;
             const delta = e.deltaY;
             const atTop = el.scrollTop <= 0;
             const atBottom = Math.ceil(el.scrollTop + el.clientHeight) >= el.scrollHeight;
-            if ((delta < 0 && !atTop) || (delta > 0 && !atBottom)){
+            if ((delta < 0 && !atTop) || (delta > 0 && !atBottom)) {
                 e.preventDefault();
                 el.scrollTop += delta;
             }
-        }, { passive:false });
+        }, {passive: false});
         window.addEventListener('resize', sizeAgendaBox);
-        window.addEventListener('load', ()=>setTimeout(sizeAgendaBox, 0));
+        window.addEventListener('load', () => setTimeout(sizeAgendaBox, 0));
         sizeAgendaBox();
     })();
 })();
 
 // === MODALE (contenu suivi / rdv) ===
-(function(){
-    const m    = document.getElementById('infoModal');
+(function () {
+    const m = document.getElementById('infoModal');
     const body = document.getElementById('infoModalBody');
     const xBtn = document.getElementById('infoModalClose');
 
-    const esc = (s)=>
+    const esc = (s) =>
         String(s ?? '')
-            .replace(/&/g,'&amp;')
-            .replace(/</g,'&lt;')
-            .replace(/>/g,'&gt;')
-            .replace(/"/g,'&quot;')
-            .replace(/'/g,'&#39;');
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
 
-    function open(html){
+    function open(html) {
         if (!m || !body) return;
         body.innerHTML = html;
         m.classList.add('is-open');
-        m.setAttribute('aria-hidden','false');
+        m.setAttribute('aria-hidden', 'false');
     }
-    function close(){
+
+    function close() {
         if (!m || !body) return;
         m.classList.remove('is-open');
-        m.setAttribute('aria-hidden','true');
+        m.setAttribute('aria-hidden', 'true');
         body.innerHTML = '';
     }
 
-    function renderSuivi(btn){
-        const tr   = btn.closest('tr');
-        const tds  = tr ? tr.children : [];
+    function renderSuivi(btn) {
+        const tr = btn.closest('tr');
+        const tds = tr ? tr.children : [];
         const date = (tds?.[0]?.textContent || '—').trim();
-        const html = (tds?.[1]?.innerHTML   || '').trim();
+        const html = (tds?.[1]?.innerHTML || '').trim();
         return `
       <h3 style="margin:0 0 10px 0;font-size:16px;">Suivi du ${esc(date)}</h3>
       <div>${html}</div>
     `;
     }
-    function renderRDV(btn){
+
+    function renderRDV(btn) {
         const d = btn.dataset || {};
         const status = d.temp === '1'
             ? '<span class="badge badge-temp">Temporaire</span>'
             : '<span class="badge badge-valid">Validé</span>';
 
-        const adr = (d.cp || d.ville) ? `${esc(d.cp||'')} ${esc(d.ville||'')}`.trim() : '—';
+        const adr = (d.cp || d.ville) ? `${esc(d.cp || '')} ${esc(d.ville || '')}`.trim() : '—';
         const marque = d.marque ? esc(d.marque) : '—';
-        const commentaire = (d.commentaire||'').trim();
+        const commentaire = (d.commentaire || '').trim();
 
         return `
     <h3 style="margin:0 0 10px 0;font-size:16px;">Détail du rendez-vous</h3>
@@ -466,88 +532,214 @@ window.__healthCheck = function(){
   `;
     }
 
-    document.addEventListener('click', (e)=>{
+    document.addEventListener('click', (e) => {
         if (e.target === m) return close();
         const btn = e.target.closest('.info-btn');
         if (!btn) return;
         const type = btn.dataset.type;
         if (type === 'suivi') return open(renderSuivi(btn));
-        if (type === 'rdv')   return open(renderRDV(btn));
+        if (type === 'rdv') return open(renderRDV(btn));
         open('<p>Pas de contenu disponible pour ce bouton.</p>');
     });
 
     xBtn && xBtn.addEventListener('click', close);
-    document.addEventListener('keydown', (e)=>{ if (e.key === 'Escape') close(); });
-    window.MODAL = { open, close };
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') close();
+    });
+    window.MODAL = {open, close};
 })();
 
 
-
 // Planifier un nouvel appel => pas d'ajout RDV
-(function(){
+(function () {
     const form = document.getElementById('interventionForm');
     const btnCall = document.getElementById('btnPlanifierAppel');
     const actionType = document.getElementById('actionType');
 
     if (!form || !btnCall || !actionType) return;
 
-    btnCall.addEventListener('click', () => {
-        actionType.value = 'call';
-        // Optionnel: on ignore date/heure du formulaire pour ne pas laisser croire qu'on va planifier
-        // document.getElementById('dtPrev')?.value = '';
-        // document.getElementById('tmPrev')?.value = '';
-        form.requestSubmit();
+    btnCall.addEventListener('click', (ev) => {
+        withBtnLock(ev.currentTarget, () => {
+            actionType.value = 'call';
+            // Optionnel: on ignore date/heure du formulaire pour ne pas laisser croire qu'on va planifier
+            // document.getElementById('dtPrev')?.value = '';
+            // document.getElementById('tmPrev')?.value = '';
+            form.requestSubmit();
+        });
     });
 })();
 
 
-
 // Valider le prochain RDV : propose Remplacer / Valider quand même / Modifier avant de valider
-(function(){
-    const form     = document.getElementById('interventionForm');
-    const btn      = document.getElementById('btnValider');
-    const numInt   = document.getElementById('openHistory')?.dataset.numInt || '';
-    const csrf     = document.querySelector('meta[name="csrf-token"]')?.content || '';
+(function () {
+    const form = document.getElementById('interventionForm');
+    const btn = document.getElementById('btnValider');
+    const numInt = document.getElementById('openHistory')?.dataset.numInt || '';
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
 
     // Modale réutilisée
-    const modal    = document.getElementById('infoModal');
-    const modalBody= document.getElementById('infoModalBody');
-    const modalX   = document.getElementById('infoModalClose');
+    const modal = document.getElementById('infoModal');
+    const modalBody = document.getElementById('infoModalBody');
+    const modalX = document.getElementById('infoModalClose');
 
-    function openModal(html){
-        if(!modal || !modalBody) return;
+    function openModal(html) {
+        if (!modal || !modalBody) return;
         modalBody.innerHTML = html;
         modal.classList.add('is-open');
-        modal.setAttribute('aria-hidden','false');
+        modal.setAttribute('aria-hidden', 'false');
     }
-    function closeModal(){
-        if(!modal || !modalBody) return;
+
+    function closeModal() {
+        if (!modal || !modalBody) return;
         modal.classList.remove('is-open');
-        modal.setAttribute('aria-hidden','true');
+        modal.setAttribute('aria-hidden', 'true');
         modalBody.innerHTML = '';
     }
+
     modalX?.addEventListener('click', closeModal);
 
     if (!btn || !form) return;
 
-    btn.addEventListener('click', async () => {
-        document.getElementById('actionType').value = 'validate_rdv'; // optionnel mais explicite
-        const tech  = document.getElementById('selAny')?.value || '';
-        const date  = document.getElementById('dtPrev')?.value || '';
-        const heure = document.getElementById('tmPrev')?.value || '';
+    btn.addEventListener('click',(ev) => {
+        withBtnLock(ev.currentTarget, async () => {
+            document.getElementById('actionType').value = 'validate_rdv'; // facultatif
+            const tech = document.getElementById('selAny')?.value || '';
+            const date = document.getElementById('dtPrev')?.value || '';
+            const heure = document.getElementById('tmPrev')?.value || '';
 
-        // Si un des 3 manque → soumission classique
-        if (!numInt || !tech || !date || !heure) {
-            form.requestSubmit();
+            // Si des champs manquent => submit classique
+            if (!numInt || !tech || !date || !heure) {
+                form.requestSubmit();
+                return;
+            }
+
+            const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+            const urlCheck = `/interventions/${encodeURIComponent(numInt)}/rdv/temporaire/check`;
+            const urlPurge = `/interventions/${encodeURIComponent(numInt)}/rdv/temporaire/purge`;
+
+            try {
+                // 1) Y a-t-il des RDV temporaires sur ce dossier ?
+                const r1 = await fetch(urlCheck, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf},
+                    body: JSON.stringify({})
+                });
+                const j1 = await r1.json().catch(() => ({ok: false, count: 0, items: []}));
+                const hasTemps = !!(j1 && j1.ok && (j1.count || 0) > 0);
+
+                if (!hasTemps) {
+                    // => aucun temp : on valide tranquillement
+                    form.requestSubmit();
+                    return;
+                }
+
+                // 2) Modale : liste des temporaires + choix
+                const listHtml = (j1.items || []).map(it => {
+                    const hhmm = (it.StartTime || '').slice(0, 5);
+                    const dfr = (it.StartDate || '').split('-').reverse().join('/');
+                    const tech = it.CodeTech || '';
+                    const lab = (it.Label || '').replace(/[<>&"]/g, s => ({
+                        '<': '&lt;',
+                        '>': '&gt;',
+                        '&': '&amp;',
+                        '"': '&quot;'
+                    }[s]));
+                    return `<li><code>${dfr} ${hhmm}</code> · <strong>${tech}</strong> — ${lab}</li>`;
+                }).join('');
+
+                const html = `
+      <div>
+        <h3 style="margin:0 0 10px 0;font-size:16px;">RDV temporaires existants</h3>
+        <p>Des rendez-vous <em>temporaires</em> sont présents sur ce dossier&nbsp;:</p>
+        <ul style="margin:8px 0 12px 16px; padding-left:10px; list-style:disc;">
+          ${listHtml}
+        </ul>
+        <p>Que souhaites-tu faire&nbsp;?</p>
+        <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;">
+          <button id="optPurgeThenValidate" class="btn ok" type="button" title="Supprimer tous les temporaires puis valider">Supprimer les temporaires puis valider</button>
+          <button id="optValidateAnyway" class="btn" type="button" title="Conserver les temporaires et valider quand même">Valider sans supprimer</button>
+          <button id="optCancel" class="btn" type="button" title="Annuler">Annuler</button>
+        </div>
+      </div>
+    `;
+                openModal(html);
+
+                // 2.a) Purger puis valider
+                modalBody.querySelector('#optPurgeThenValidate')?.addEventListener('click',  (e) => {
+                    withBtnLock(e.currentTarget, async () => {
+                        try {
+                            const r2 = await fetch(urlPurge, {
+                                method: 'POST',
+                                credentials: 'same-origin',
+                                headers: {
+                                    'Accept': 'application/json',
+                                    'Content-Type': 'application/json',
+                                    'X-CSRF-TOKEN': csrf
+                                },
+                                body: JSON.stringify({})
+                            });
+                            const j2 = await r2.json().catch(() => ({ok: false, deleted: 0}));
+                            if (!j2.ok) {
+                                alert('❌ Échec de la suppression des RDV temporaires.');
+                                return;
+                            }
+                            // rafraîchir l’agenda (optionnel) puis submit
+                            document.getElementById('selModeTech')?.dispatchEvent(new Event('change'));
+                            closeModal();
+                            form.requestSubmit();
+
+                        } catch (e) {
+                            console.error('[purge temporaires] erreur', e);
+                            alert('❌ Erreur lors de la suppression des RDV temporaires.');
+                        }
+                    });
+                }, {once: true});
+
+                // 2.b) Valider sans supprimer
+                modalBody.querySelector('#optValidateAnyway')?.addEventListener('click', (e) => {
+                    withBtnLock(e.currentTarget, () => {
+                        closeModal();
+                        form.requestSubmit();
+                    });
+                }, { once: true });
+
+                // 2.c) Annuler
+                modalBody.querySelector('#optCancel')?.addEventListener('click', (e) => {
+                    withBtnLock(e.currentTarget, () => closeModal());
+                }, { once: true });
+
+            } catch (e) {
+                console.error('[Valider RDV] erreur', e);
+                // En cas d’erreur réseau, on ne bloque pas la validation
+                form.requestSubmit();
+            }
+        });
+    });
+
+})();
+
+
+document.getElementById('btnPlanifierRdv')?.addEventListener('click',(ev) => {
+    withBtnLock(ev.currentTarget, async () => {
+        document.getElementById('actionType').value = '';
+        const numInt = document.getElementById('openHistory')?.dataset.numInt;
+        const tech = document.getElementById('selAny')?.value || '';
+        const date = document.getElementById('dtPrev')?.value || '';
+        const time = document.getElementById('tmPrev')?.value || '';
+
+        if (!numInt || !tech || !date || !time) {
+            alert('Sélectionne le technicien, la date et l’heure.');
             return;
         }
 
-        // 1) Check existence RDV temporaire identique (dry-run)
-        const urlCheck = `/interventions/${encodeURIComponent(numInt)}/rdv/valider`;
-        try{
-            const r1 = await fetch(urlCheck, {
+        const url = `/interventions/${encodeURIComponent(numInt)}/rdv/temporaire`;
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+        try {
+            const res = await fetch(url, {
                 method: 'POST',
-                credentials: 'same-origin',             // ⬅️ IMPORTANT
+                credentials: 'same-origin',
                 headers: {
                     'Accept': 'application/json',
                     'Content-Type': 'application/json',
@@ -556,218 +748,76 @@ window.__healthCheck = function(){
                 body: JSON.stringify({
                     rea_sal: tech,
                     date_rdv: date,
-                    heure_rdv: heure,
-                    dry_run: true
+                    heure_rdv: time,
+                    code_postal: document.querySelector('input[name="code_postal"]')?.value || null,
+                    ville: document.querySelector('input[name="ville"]')?.value || null,
+                    commentaire: document.querySelector('#commentaire')?.value || ''
                 }),
             });
-            const j1 = await r1.json().catch(()=>({ok:false}));
-            const exists = !!(j1 && j1.ok && j1.exists === true);
 
-            if (!exists) {
-                // → Pas de RDV temporaire : soumission normale
-                form.requestSubmit();
+            const raw = await res.text();
+            let out = null;
+            try {
+                out = JSON.parse(raw);
+            } catch (e) {
+            }
+
+            if (!res.ok || !out || out.ok !== true) {
+                const ct = res.headers.get('content-type') || '';
+                const probable =
+                    res.status === 419 ? 'CSRF ou session expirée' :
+                        res.status === 401 ? 'Non authentifié' :
+                            res.status === 422 ? 'Erreurs de validation' :
+                                res.status === 500 ? 'Erreur serveur (exception)' :
+                                    !ct.includes('application/json') ? 'Réponse non-JSON (souvent une page HTML de login)' :
+                                        'Inconnue';
+
+                let details = '';
+                if (out && out.type === 'QueryException') {
+                    details = `\nSQLSTATE: ${out.sqlstate}\nErrno: ${out.errno}\nMessage: ${out.errmsg}\n@ ${out.file}`;
+                } else if (out && out.errmsg) {
+                    details = `\nMessage: ${out.errmsg}\n@ ${out.file || ''}`;
+                }
+
+                alert(
+                    [
+                        '❌ Création RDV temporaire échouée',
+                        `HTTP: ${res.status}`,
+                        `Cause probable: ${probable}`,
+                        details || (ct.includes('application/json') ? '' : `\nHTML/Corps (extrait):\n${raw.slice(0, 400)}`)
+                    ].filter(Boolean).join('\n')
+                );
                 return;
             }
 
-            // 2) RDV temporaire trouvé → pop-up avec 3 choix
-            const html = `
-        <div>
-          <h3 style="margin:0 0 10px 0;font-size:16px;">RDV temporaire détecté</h3>
-          <p>Un RDV <em>temporaire</em> existe déjà pour <strong>${date.split('-').reverse().join('/')}</strong> à <strong>${heure}</strong> sur ce dossier.</p>
-          <p>Que souhaites-tu faire&nbsp;?</p>
-          <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;">
-            <button id="optRemplacer" class="btn ok" type="button" title="Valider et actualiser le RDV existant">Remplacer</button>
-            <button id="optValiderQuandMeme" class="btn" type="button" title="Ne pas toucher au RDV temporaire et valider le formulaire">Valider quand même</button>
-            <button id="optModifier" class="btn" type="button" title="Fermer la fenêtre pour modifier avant de valider">Modifier avant de valider</button>
-          </div>
-        </div>
-      `;
-            openModal(html);
-
-            // 2.a) Remplacer → on valide/actualise côté serveur, puis on submit le formulaire
-            modalBody.querySelector('#optRemplacer')?.addEventListener('click', async ()=>{
-                try{
-                    const r2 = await fetch(urlCheck, {
-                        method: 'POST',
-                        credentials: 'same-origin',             // ⬅️ IMPORTANT
-                        headers: {
-                            'Accept': 'application/json',
-                            'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': csrf,
-                        },
-                        body: JSON.stringify({
-                            rea_sal: tech,
-                            date_rdv: date,
-                            heure_rdv: heure,
-                            commentaire: document.querySelector('#commentaire')?.value || '',
-                            code_postal: document.querySelector('input[name="code_postal"]')?.value || null,
-                            ville: document.querySelector('input[name="ville"]')?.value || null,
-                            dry_run: false
-                        }),
-                    });
-                    const j2 = await r2.json().catch(()=>({ok:false}));
-                    if (!r2.ok || !j2.ok) {
-                        const text = await r2.text();
-                        let payload = null;
-                        try { payload = JSON.parse(text); } catch(e) {}
-
-                        if (!r2.ok || !payload?.ok) {
-                            // Cas typiques : 302 (redir), 419/401 (CSRF/session), 422 (validation), 500 (PHP)
-                            const ct = r2.headers.get('content-type') || '';
-                            const probable =
-                                r2.redirected ? 'Redirection (session expirée ? middleware check.session)' :
-                                    r2.status === 419 ? 'CSRF ou session expirée' :
-                                        r2.status === 401 ? 'Non authentifié' :
-                                            r2.status === 422 ? 'Erreurs de validation' :
-                                                r2.status === 500 ? 'Erreur serveur (exception)' :
-                                                    !ct.includes('application/json') ? 'Réponse non-JSON (souvent une page HTML de login)' :
-                                                        'Inconnue';
-
-                            // Essaie d’attraper les messages Laravel de validation si 422
-                            let validationMsg = '';
-                            if (payload && payload.errors) {
-                                validationMsg = Object.entries(payload.errors)
-                                    .map(([k, v]) => `- ${k}: ${Array.isArray(v)?v.join(', '):v}`)
-                                    .join('\n');
-                            }
-
-                            alert(
-                                [
-                                    '❌ Création RDV temporaire échouée',
-                                    `HTTP: ${r2.status}`,
-                                    `Cause probable: ${probable}`,
-                                    payload?.msg ? `Message: ${payload.msg}` : '',
-                                    validationMsg ? `Validation:\n${validationMsg}` : '',
-                                    !ct.includes('application/json') ? 'Corps (extrait HTML) :\n' + text.slice(0,400) : ''
-                                ].filter(Boolean).join('\n')
-                            );
-                            return;
-                        }
-
-                    }
-                    // Flag pour backend (si tu veux éviter un doublon planning dans updateIntervention)
-                    const flag = document.getElementById('rdvValidatedByAjax');
-                    if (flag) flag.value = '1';
-
-                    // Refresh vue agenda et submit
-                    document.getElementById('selModeTech')?.dispatchEvent(new Event('change'));
-                    closeModal();
-                    form.requestSubmit();
-                }catch(e){
-                    console.error('[Valider RDV - Remplacer] erreur', e);
-                    alert("Erreur lors de la validation/actualisation du RDV.");
-                }
-            });
-
-            // 2.b) Valider quand même → on ne touche pas au RDV temporaire, on envoie le formulaire
-            modalBody.querySelector('#optValiderQuandMeme')?.addEventListener('click', ()=>{
-                closeModal();
-                form.requestSubmit();
-            });
-
-            // 2.c) Modifier avant de valider → on ferme, aucun submit
-            modalBody.querySelector('#optModifier')?.addEventListener('click', ()=>{
-                closeModal();
-            });
-
-        }catch(e){
-            console.error('[Valider RDV] erreur', e);
-            // En cas de souci réseau, on retombe sur la validation normale pour ne pas bloquer
-            form.requestSubmit();
+            // ✅ succès
+            document.getElementById('selModeTech')?.dispatchEvent(new Event('change'));
+            document.querySelector('#commentaire').value = '';
+            alert(out.mode === 'updated' ? 'RDV temporaire mis à jour.' : 'RDV temporaire créé.');
+        } catch (e) {
+            alert(`❌ Appel réseau en échec\n${e?.name || 'Error'}: ${e?.message || e}`);
         }
     });
-})();
-
-
-
-document.getElementById('btnPlanifierRdv')?.addEventListener('click', async () => {
-    document.getElementById('actionType').value = '';
-    const numInt = document.getElementById('openHistory')?.dataset.numInt;
-    const tech   = document.getElementById('selAny')?.value || '';
-    const date   = document.getElementById('dtPrev')?.value || '';
-    const time   = document.getElementById('tmPrev')?.value || '';
-
-    if (!numInt || !tech || !date || !time) {
-        alert('Sélectionne le technicien, la date et l’heure.');
-        return;
-    }
-
-    const url = `/interventions/${encodeURIComponent(numInt)}/rdv/temporaire`;
-    const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
-
-    try {
-        const res = await fetch(url, {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': csrf,
-            },
-            body: JSON.stringify({
-                rea_sal: tech,
-                date_rdv: date,
-                heure_rdv: time,
-                code_postal: document.querySelector('input[name="code_postal"]')?.value || null,
-                ville: document.querySelector('input[name="ville"]')?.value || null,
-                commentaire: document.querySelector('#commentaire')?.value || ''
-            }),
-        });
-
-        const raw = await res.text();
-        let out = null; try { out = JSON.parse(raw); } catch(e) {}
-
-        if (!res.ok || !out || out.ok !== true) {
-            const ct = res.headers.get('content-type') || '';
-            const probable =
-                res.status === 419 ? 'CSRF ou session expirée' :
-                    res.status === 401 ? 'Non authentifié' :
-                        res.status === 422 ? 'Erreurs de validation' :
-                            res.status === 500 ? 'Erreur serveur (exception)' :
-                                !ct.includes('application/json') ? 'Réponse non-JSON (souvent une page HTML de login)' :
-                                    'Inconnue';
-
-            let details = '';
-            if (out && out.type === 'QueryException') {
-                details = `\nSQLSTATE: ${out.sqlstate}\nErrno: ${out.errno}\nMessage: ${out.errmsg}\n@ ${out.file}`;
-            } else if (out && out.errmsg) {
-                details = `\nMessage: ${out.errmsg}\n@ ${out.file || ''}`;
-            }
-
-            alert(
-                [
-                    '❌ Création RDV temporaire échouée',
-                    `HTTP: ${res.status}`,
-                    `Cause probable: ${probable}`,
-                    details || (ct.includes('application/json') ? '' : `\nHTML/Corps (extrait):\n${raw.slice(0,400)}`)
-                ].filter(Boolean).join('\n')
-            );
-            return;
-        }
-
-        // ✅ succès
-        document.getElementById('selModeTech')?.dispatchEvent(new Event('change'));
-        document.querySelector('#commentaire').value = '';
-        alert(out.mode === 'updated' ? 'RDV temporaire mis à jour.' : 'RDV temporaire créé.');
-    } catch (e) {
-        alert(`❌ Appel réseau en échec\n${e?.name || 'Error'}: ${e?.message || e}`);
-    }
 });
 
 
-
-
 // === Fenêtre "Historique" (popup) — sans boutons ===
-(function(){
+(function () {
     const btn = document.getElementById('openHistory');
     if (!btn) return;
 
     btn.addEventListener('click', () => {
         const tpl = document.getElementById('tplHistory');
-        if (!tpl) { console.error('[HIST] template #tplHistory introuvable'); return; }
+        if (!tpl) {
+            console.error('[HIST] template #tplHistory introuvable');
+            return;
+        }
 
-        const w = window.open('', 'historique_'+Date.now(), 'width=960,height=720');
-        if (!w) { console.error('[HIST] window.open a été bloqué'); return; }
+        const w = window.open('', 'historique_' + Date.now(), 'width=960,height=720');
+        if (!w) {
+            console.error('[HIST] window.open a été bloqué');
+            return;
+        }
 
         // Récupère le HTML du template
         let inner = '';
@@ -790,7 +840,12 @@ document.getElementById('btnPlanifierRdv')?.addEventListener('click', async () =
 
         // Numéro d'intervention via data-num-int du bouton
         const numInt = btn.dataset.numInt || '';
-        const safeNum = numInt ? String(numInt).replace(/[<>&"]/g, s=>({ '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;' }[s])) : '';
+        const safeNum = numInt ? String(numInt).replace(/[<>&"]/g, s => ({
+            '<': '&lt;',
+            '>': '&gt;',
+            '&': '&amp;',
+            '"': '&quot;'
+        }[s])) : '';
 
         const html = `
 <!doctype html>
@@ -837,20 +892,20 @@ document.getElementById('btnPlanifierRdv')?.addEventListener('click', async () =
 })();
 
 
-(function enforceNoPast(){
+(function enforceNoPast() {
     const d = document.getElementById('dtPrev');
     const t = document.getElementById('tmPrev');
 
-    if(!d || !t) return;
+    if (!d || !t) return;
 
     // min = aujourd'hui
     const now = new Date();
-    const pad = n => (n<10?'0':'')+n;
-    const today = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
-    const hhmm  = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    const pad = n => (n < 10 ? '0' : '') + n;
+    const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+    const hhmm = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
     d.min = today;
 
-    function applyTimeMin(){
+    function applyTimeMin() {
         // Si la date choisie est aujourd'hui -> min = heure courante, sinon min libre
         if (d.value === today) {
             t.min = hhmm;
@@ -864,4 +919,16 @@ document.getElementById('btnPlanifierRdv')?.addEventListener('click', async () =
     d.addEventListener('change', applyTimeMin);
     // au chargement
     applyTimeMin();
+})();
+
+
+(function(){
+    const form = document.getElementById('interventionForm');
+    if (!form) return;
+    form.addEventListener('submit', (e) => {
+        if (form.dataset.lock === '1') { e.preventDefault(); return; }
+        form.dataset.lock = '1';
+        // Le rechargement page lèvera ce lock ; au cas où validation serveur et on reste ici :
+        setTimeout(()=>{ form.dataset.lock = ''; }, 1500);
+    });
 })();

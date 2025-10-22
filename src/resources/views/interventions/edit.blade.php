@@ -15,9 +15,8 @@
         <input type="hidden" name="code_sal_auteur" value="{{ $data->CodeSal ?? 'Utilisateur' }}">
         <input type="hidden" name="marque" value="{{$interv->Marque ?? ''}}">
         <input type="hidden" name="objet_trait" value="{{$objetTrait ?? ''}}">
-        <input type="hidden" name="code_postal" value="{{$interv-> CPLivCli ?? ''}}">
+        <input type="hidden" name="code_postal" value="{{$interv->CPLivCli ?? ''}}">
         <input type="hidden" name="ville" value="{{$interv->VilleLivCli ?? ''}}">
-        <input type="hidden" name="rdv_validated_by_ajax" id="rdvValidatedByAjax" value="">
         <input type="hidden" name="action_type" id="actionType" value="">
 
         <div class="app">
@@ -102,13 +101,6 @@
                             @forelse($suivis as $suivi)
                                 @php
                                     $dateTxt = '—';
-                                    if ($suivi->CreatedAt) {
-                                        try {
-                                            $dt = \Carbon\Carbon::parse($suivi->CreatedAt);
-                                            $fmt = $dt->toTimeString() !== '00:00:00' ? 'd/m/Y H:i' : 'd/m/Y';
-                                            $dateTxt = $dt->format($fmt);
-                                        } catch (\Exception $e) {}
-                                    }
 
                                     // Ligne courte = 1ère ligne du texte
                                     $raw = (string)($suivi->Texte ?? '');
@@ -126,7 +118,6 @@
                                     }
 
                                     $dateIso = $meta['date'] ?? null;                 // "YYYY-MM-DD"
-                                    $dateTxt = null;
                                     if ($dateIso && preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateIso)) {
                                         $parts = explode('-', $dateIso);
                                         $dateTxt = $parts[2].'/'.$parts[1].'/'.$parts[0]; // JJ/MM/AAAA

@@ -48,10 +48,11 @@ Route::post('/interventions/{numInt}/rdv/temporaire',
     [MainController::class,'rdvTemporaire']
 )->name('interventions.rdv.temporaire')->middleware('check.session');
 
-Route::post(
-    '/interventions/{numInt}/rdv/valider',
-    [MainController::class,'validerRdv']
-)->name('interventions.rdv.valider')->middleware('check.session');
+
+Route::post('/interventions/{numInt}/rdv/temporaire/check', [MainController::class, 'rdvTempCheck'])
+    ->name('rdv.temp.check');
+Route::post('/interventions/{numInt}/rdv/temporaire/purge', [MainController::class, 'rdvTempPurge'])
+    ->name('rdv.temp.purge');
 
 
 
