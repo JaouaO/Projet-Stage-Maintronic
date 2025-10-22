@@ -235,6 +235,29 @@ input,select,textarea{
     width: 100%;
 }
 
+.badge{
+    display:inline-block; padding:2px 6px; border-radius:999px;
+    font-size:11px; line-height:1.2; border:1px solid var(--line);
+}
+.badge-temp{ background:#fff5dc; border-color:#e6b34e; color:#7a5400; }
+.badge-valid{ background:#e9f8ef; border-color:#0d6b2d; color:#0d6b2d; }
+
+.badge-obj{
+    display:inline-block; padding:2px 6px; border-radius:999px;
+    font-size:11px; line-height:1.2; border:1px solid var(--line);
+    background:#eef3ff; color:#214c9c; border-color:#a7bce8;
+    text-transform: none;
+}
+.mutsep{ color:#999; margin:0 4px; }
+
+.chips-wrap{ display:flex; flex-wrap:wrap; gap:6px; }
+.chip{
+    display:inline-block; padding:3px 8px; border-radius:999px;
+    font-size:12px; line-height:1.1; border:1px solid var(--line);
+    white-space:nowrap;
+}
+.chip-green{ background:#e9f8ef; border-color:#0d6b2d; color:#0d6b2d; }
+.chip-amber{ background:#fff5dc; border-color:#e6b34e; color:#7a5400; }
 
 
 

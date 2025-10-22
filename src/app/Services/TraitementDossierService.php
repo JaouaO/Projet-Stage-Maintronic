@@ -66,6 +66,25 @@ class TraitementDossierService
             ];
         }
 
+        $labelsOnArr = static function(array $items): array {
+            $out = [];
+            foreach ($items as $it) {
+                if (!empty($it['checked'])) $out[] = $it['label'];
+            }
+            return $out;
+        };
+
+        $traitementList  = $labelsOnArr($traitementItems);
+
+
+// $affectationTexte actuel (ex: "Affaires, Commande de pièce")
+        $affectationTexte = trim((string)($etat->objet_traitement ?? ''));
+        $affectationList  = array_values(array_filter(array_map('trim', explode(',', $affectationTexte))));
+
+// (si tu gardes aussi les versions "texte")
+        $traitementTexte = implode(', ', $traitementList);
+
+
         // 5) Agences autorisées
         $agences = $this->resolveAgencesAutorisees($agencesAutorisees, $interv);
 
@@ -113,6 +132,10 @@ class TraitementDossierService
             'interv'            => $interv,
             'traitementItems'   => $traitementItems,
             'affectationItems'  => $affectationItems,
+            'traitementTexte'  => $traitementTexte,   // déjà proposé
+            'affectationTexte' => $affectationTexte,  // déjà proposé
+            'traitementList'   => $traitementList,    // NEW (array)
+            'affectationList'  => $affectationList,   // NEW (array)
             'objetTrait'        => $objetTrait,
             'contactReel'       => $contactReel,
             'salaries'          => $salaries,
@@ -153,4 +176,6 @@ class TraitementDossierService
         $fallback = isset($interv->AgTrf) ? $interv->AgTrf : (isset($GLOBALS['data']->CodeAgSal) ? $GLOBALS['data']->CodeAgSal : null);
         return $fallback ? [$fallback] : [];
     }
+
+
 }

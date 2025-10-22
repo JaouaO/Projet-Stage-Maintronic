@@ -34,9 +34,15 @@ class PlanningService
                 'p.NumIntRef',
                 'p.Label',
                 'p.IsValidated',
+                'p.Commentaire',        // NEW
+                'p.CPLivCli',           // NEW
+                'p.VilleLivCli',        // NEW
+                'i.Marque',             // NEW
                 'e.contact_reel as Contact'
             )
             ->leftJoin('t_actions_etat as e', 'e.NumInt', '=', 'p.NumIntRef')
+            ->whereBetween('p.StartDate', [$start->toDateString(), $end->toDateString()])
+            ->leftJoin('t_intervention as i', 'i.NumInt', '=', 'p.NumIntRef') // NEW
             ->whereBetween('p.StartDate', [$start->toDateString(), $end->toDateString()])
             ->orderBy('p.StartDate')
             ->orderBy('p.StartTime');
@@ -65,6 +71,10 @@ class PlanningService
                 'num_int'        => $r->NumIntRef,
                 'contact'        => $r->Contact ?: null,
                 'is_validated'   =>  isset($r->IsValidated) ? ((int)$r->IsValidated === 1) : null,
+                'commentaire'    => $r->Commentaire ?: null,      // NEW
+                'cp'             => $r->CPLivCli ?: null,         // NEW
+                'ville'          => $r->VilleLivCli ?: null,      // NEW
+                'marque'         => $r->Marque ?: null,           // NEW
             ];
         }
 

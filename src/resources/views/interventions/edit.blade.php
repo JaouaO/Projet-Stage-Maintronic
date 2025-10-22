@@ -1,5 +1,6 @@
 @extends('layouts.base')
 @section('title', 'Intervention')
+<?php $exp_ui = true; ?>
 
 @section('content')
 
@@ -20,70 +21,7 @@
         <input type="hidden" name="action_type" id="actionType" value="">
 
         <div class="app">
-
-            <!-- {{-- GAUCHE --}}
-
-                <div class="box hist">
-                    <div class="head"><strong>Historique (serveur)</strong><span class="note">résumé</span></div>
-                    <div class="body table">
-                        <table>
-                            <thead>
-                            <tr>
-                                <th class="w-150">Date (srv)</th>
-                                <th>Action / Commentaire</th>
-                                <th class="col-icon"></th> {{-- icône info --}}
-                            </tr>
-                            </thead>
-                            <tbody>
-                            @forelse($suivis as $suivi)
-                                @php
-                                    $dateTxt='—';
-                                    if($suivi->CreatedAt){
-                                        try{
-                                            $dt=\Carbon\Carbon::parse($suivi->CreatedAt);
-                                            $dateTxt=$dt->format($dt->toTimeString()!=='00:00:00'?'d/m/Y H:i':'d/m/Y');
-                                        }catch(\Exception $e){}
-                                    }
-                                @endphp
-                                <tr>
-                                    <td>{{ $dateTxt }}</td>
-                                    <td>
-                                        @if($suivi->CodeSalAuteur)
-                                            <strong>{{ $suivi->CodeSalAuteur }}</strong> —
-                                        @endif
-                                        @if($suivi->Titre)
-                                            <em>{{ $suivi->Titre }}</em> —
-                                        @endif
-                                        {{ $suivi->Texte }}
-                                    </td>
-                                    <td class="col-icon">
-                                        <button class="icon-btn info-btn"
-                                                type="button"
-                                                title="Informations suivi"
-                                                aria-label="Informations suivi"
-                                                data-type="suivi"
-                                                data-id="{{ $suivi->id }}">
-                                            i
-                                        </button>
-                                    </td>
-                                </tr>
-                            @empty
-                                <tr>
-                                    <td>—</td>
-                                    <td>Aucun suivi</td>
-                                </tr>
-                            @endforelse
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                -->
-
-
-
-
-            {{-- CENTRE : Traitement du dossier --}}
+            {{-- Gauche : Traitement du dossier --}}
             <section class="col center">
                 <div class="box">
                     <div class="head">
@@ -142,62 +80,113 @@
                     </div>
 
 
-
                 </div>
 
 
-                        {{-- Gabarit HTML injecté dans la nouvelle fenêtre --}}
-                        <template id="tplHistory">
-                            <div class="hist-wrap">
-                                <h2 style="margin:6px 0 12px 0;">Historique du dossier {{ $interv->NumInt }}</h2>
-                                <table class="hist-table" style="width:100%;border-collapse:collapse">
-                                    <thead>
-                                    <tr>
-                                        <th style="width:150px;text-align:left;border-bottom:1px solid #ddd;">Date (srv)</th>
-                                        <th style="text-align:left;border-bottom:1px solid #ddd;">Action / Commentaire (résumé)</th>
-                                        <th style="width:40px;border-bottom:1px solid #ddd;"></th>
-                                    </tr>
-                                    </thead>
-                                    <tbody>
-                                    @forelse($suivis as $suivi)
-                                        @php
-                                            $dateTxt='—';
-                                            if($suivi->CreatedAt){
-                                                try{
-                                                    $dt=\Carbon\Carbon::parse($suivi->CreatedAt);
-                                                    $dateTxt=$dt->format($dt->toTimeString()!=='00:00:00'?'d/m/Y H:i':'d/m/Y');
-                                                }catch(\Exception $e){}
-                                            }
-                                            // résumé = première ligne du texte
-                                            $resume = trim(preg_split('/\R/', (string)$suivi->Texte, 2)[0] ?? '');
-                                        @endphp
-                                        <tr class="row-main" data-row="main" style="border-bottom:1px solid #f0f0f0;">
-                                            <td style="padding:6px 8px;">{{ $dateTxt }}</td>
-                                            <td style="padding:6px 8px;">
-                                                @if($suivi->CodeSalAuteur)<strong>{{ $suivi->CodeSalAuteur }}</strong> — @endif
-                                                @if($suivi->Titre)<em>{{ $suivi->Titre }}</em> — @endif
-                                                {{ $resume }}
-                                            </td>
-                                            <td style="padding:6px 8px;text-align:center;">
-                                                <button class="hist-toggle" type="button" aria-expanded="false" title="Afficher le détail">+</button>
-                                            </td>
-                                        </tr>
-                                        <tr class="row-details" data-row="details" style="display:none;">
-                                            <td colspan="3" style="padding:8px 10px;background:#fafafa;border-bottom:1px solid #eee;">
-                                                {{-- Détail complet (mêmes infos que la modale actuelle) --}}
-                                                @if($suivi->CodeSalAuteur)<div><strong>Auteur :</strong> {{ $suivi->CodeSalAuteur }}</div>@endif
-                                                @if($suivi->Titre)<div><strong>Titre :</strong> <em>{{ $suivi->Titre }}</em></div>@endif
-                                                <div style="margin-top:6px;white-space:pre-wrap;">{{ $suivi->Texte }}</div>
-                                            </td>
-                                        </tr>
-                                    @empty
-                                        <tr><td colspan="3" class="note" style="padding:8px 10px;">Aucun suivi</td></tr>
-                                    @endforelse
-                                    </tbody>
-                                </table>
-                            </div>
-                        </template>
+                {{-- Gabarit HTML injecté dans la nouvelle fenêtre --}}
+                <template id="tplHistory">
+                    <div class="hist-wrap">
+                        <h2 style="margin:6px 0 12px 0;">Historique du dossier {{ $interv->NumInt }}</h2>
+                        <table class="hist-table" style="width:100%;border-collapse:collapse">
+                            <thead>
+                            <tr>
+                                <th style="width:150px;text-align:left;border-bottom:1px solid #ddd;">Date</th>
+                                <th style="text-align:left;border-bottom:1px solid #ddd;">
+                                    Résumé
+                                </th>
+                                <th style="width:40px;border-bottom:1px solid #ddd;"></th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            @forelse($suivis as $suivi)
+                                @php
+                                    $dateTxt = '—';
+                                    if ($suivi->CreatedAt) {
+                                        try {
+                                            $dt = \Carbon\Carbon::parse($suivi->CreatedAt);
+                                            $fmt = $dt->toTimeString() !== '00:00:00' ? 'd/m/Y H:i' : 'd/m/Y';
+                                            $dateTxt = $dt->format($fmt);
+                                        } catch (\Exception $e) {}
+                                    }
 
+                                    // Ligne courte = 1ère ligne du texte
+                                    $raw = (string)($suivi->Texte ?? '');
+                                    $resumeLine = trim(preg_split('/\R/', $raw, 2)[0] ?? '');
+                                    $resumeClean = rtrim($resumeLine, " \t—–-:;.,");
+
+                                    $objet = trim((string)($suivi->Titre ?? ''));
+                                    $auteur = trim((string)($suivi->CodeSalAuteur ?? ''));
+                                @endphp
+
+                                <tr class="row-main" data-row="main" style="border-bottom:1px solid #f0f0f0;">
+                                    <td style="padding:6px 8px;">{{ $dateTxt }}</td>
+                                    <td style="padding:6px 8px;">
+                                        @if($auteur !== '') <strong>{{ $auteur }}</strong> — @endif
+                                        @if($objet  !== '') <em>{{ $objet }}</em> — @endif
+                                        {{ $resumeClean !== '' ? $resumeClean : '—' }}
+                                    </td>
+
+                                    <td style="padding:6px 8px;text-align:center;">
+                                        <button class="hist-toggle" type="button" aria-expanded="false"
+                                                title="Afficher le détail">+
+                                        </button>
+                                    </td>
+                                </tr>
+
+                                <tr class="row-details" data-row="details" style="display:none;">
+                                    <td colspan="3"
+                                        style="padding:10px 12px;background:#fafafa;border-bottom:1px solid #eee;">
+                                        {{-- Détail complet du suivi --}}
+                                        @if($suivi->CodeSalAuteur)
+                                            <div><strong>Auteur :</strong> {{ $suivi->CodeSalAuteur }}</div>
+                                        @endif
+                                        @if($suivi->Titre)
+                                            <div><strong>Titre :</strong> <em>{{ $suivi->Titre }}</em></div>
+                                        @endif
+
+                                        {{-- Affichage complet du commentaire sans filtrage --}}
+                                        <div style="margin-top:8px;white-space:pre-wrap;">{{ $raw }}</div>
+
+                                        @if(!empty($traitementList) || !empty($affectationList))
+                                            <hr style="border:none;border-top:1px solid #e5e7eb; margin:10px 0">
+                                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                                                <div>
+                                                    <div style="font-weight:600;margin-bottom:6px;">Tâches effectuées</div>
+                                                    @if(!empty($traitementList))
+                                                        <div class="chips-wrap">
+                                                            @foreach($traitementList as $lbl)
+                                                                <span class="chip chip-green">{{ $lbl }}</span>
+                                                            @endforeach
+                                                        </div>
+                                                    @else
+                                                        <div class="note">—</div>
+                                                    @endif
+                                                </div>
+                                                <div>
+                                                    <div style="font-weight:600;margin-bottom:6px;">Affectation</div>
+                                                    @if(!empty($affectationList))
+                                                        <div class="chips-wrap">
+                                                            @foreach($affectationList as $lbl)
+                                                                <span class="chip chip-amber">{{ $lbl }}</span>
+                                                            @endforeach
+                                                        </div>
+                                                    @else
+                                                        <div class="note">—</div>
+                                                    @endif
+                                                </div>
+                                            </div>
+                                        @endif
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="3" class="note" style="padding:8px 10px;">Aucun suivi</td>
+                                </tr>
+                            @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+                </template>
 
 
                 <div class="box mserv">
@@ -205,16 +194,13 @@
                     </div>
                     <div class="body">
                         <div>
-                            <input type="text" id="commentaire" name="commentaire" maxlength="1000">
+                            <input type="text" id="commentaire" name="commentaire" maxlength="249">
                         </div>
                     </div>
                 </div>
 
 
-
             </section>
-
-
 
 
             {{-- DROITE : Affectation + Agenda du technicien --}}
@@ -222,7 +208,7 @@
                 <div class="box">
                     <div class="head">
                         <strong>Affectation du dossier</strong>
-                          <span id="srvDateTimeText" class="note">—</span>
+                        <span id="srvDateTimeText" class="note">—</span>
                     </div>
                     <div class="body">
 
@@ -368,11 +354,15 @@
 
                                     {{-- Liste du jour sélectionné --}}
                                     <div id="calList" class="cal-list is-hidden">
-                                            <div id="calListHead">
-                                                <button id="dayPrev" class="btn" type="button" title="Jour précédent" aria-label="Jour précédent">◀</button>
-                                                <div id="calListTitle"></div>
-                                                <button id="dayNext" class="btn" type="button" title="Jour suivant" aria-label="Jour suivant">▶</button>
-                                            </div>
+                                        <div id="calListHead">
+                                            <button id="dayPrev" class="btn" type="button" title="Jour précédent"
+                                                    aria-label="Jour précédent">◀
+                                            </button>
+                                            <div id="calListTitle"></div>
+                                            <button id="dayNext" class="btn" type="button" title="Jour suivant"
+                                                    aria-label="Jour suivant">▶
+                                            </button>
+                                        </div>
                                         <div id="calListBody" class="table">
                                             <table>
                                                 <thead>

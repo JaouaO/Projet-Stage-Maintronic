@@ -267,6 +267,9 @@ class MainController extends Controller
             $EndDate = $end->toDateString();   // même jour ou +1j si > 23h
             $EndTime = $end->format('H:i:s');  // heure +1h
 
+            $labelComment = trim($commentaire) !== '' ? mb_substr($commentaire, 0, 60) : '';
+            $label = trim($numInt . ' -- ' . $labelComment);
+
             $data = [
                 'CodeTech' => $reaSal,
                 'StartTime' => $heureRdv,
@@ -274,7 +277,7 @@ class MainController extends Controller
                 'StartDate' => $dateRdv,
                 'EndDate' => $EndDate,
                 'NumIntRef' => $numInt,
-                'Label' => 'Intervention pour le dossier ' . $numInt,
+                'Label' => $label,
                 'Commentaire' => $commentaire,
                 'CPLivCli' => $codePostal,
                 'VilleLivCli' => $ville,
@@ -292,8 +295,7 @@ class MainController extends Controller
             'CreatedAt'     => now('Europe/Paris'),
             'CodeSalAuteur' =>$codeSal,
             'Titre'         => $objet_trait,
-            'Texte'         => ($messageTraitement ? "TRAITEMENT : $messageTraitement\n" : '')
-                ."COMMENTAIRE : ".$commentaire,
+            'Texte'         => $commentaire,
         ]);
 
 
@@ -326,119 +328,191 @@ class MainController extends Controller
 
     public function rdvTemporaire(Request $request, string $numInt)
     {
-        $data = $request->validate([
-            'rea_sal'   => ['required','string','max:5'],
-            'date_rdv'  => ['required','date_format:Y-m-d'],
-            'heure_rdv' => ['required','date_format:H:i'],
-        ]);
+        try {
+            $data = $request->validate([
+                'rea_sal'   => ['required','string','max:5'],
+                'date_rdv'  => ['required','date_format:Y-m-d'],
+                'heure_rdv' => ['required','date_format:H:i'],
+                'commentaire' => ['nullable','string','max:250'],
+            ]);
 
+            $tech  = $data['rea_sal'];
+            $date  = $data['date_rdv'];
+            $heure = $data['heure_rdv'];
+            $commentaire = $data['commentaire'] ?? null;
 
-        $tech  = $data['rea_sal'];
-        $date  = $data['date_rdv'];
-        $heure = $data['heure_rdv'];
+            $start = \Carbon\Carbon::parse("$date $heure",'Europe/Paris');
+            $end   = (clone $start)->addHour();
 
-        $start = \Carbon\Carbon::parse("$date $heure",'Europe/Paris');
-        $end   = (clone $start)->addHour();
-
-        $exists = DB::table('t_planning_technicien')
-            ->where([
+            // Mise à jour si créneau identique existe déjà (même NumInt + date + heure)
+            $exists = DB::table('t_planning_technicien')->where([
                 ['NumIntRef', '=', $numInt],
                 ['StartDate', '=', $start->toDateString()],
                 ['StartTime', '=', $start->format('H:i:s')],
-            ])->exists();
+            ])->first();
 
-        if ($exists) {
-            return response()->json(['ok'=>false, 'msg'=>'Créneau déjà saisi pour ce dossier'], 409);
+            $labelComment = $commentaire ? mb_substr($commentaire, 0, 60) : '';
+            $label = trim($numInt . ' -- ' . $labelComment);
+
+            $payload = [
+                'CodeTech'    => $tech,
+                'StartDate'   => $start->toDateString(),
+                'StartTime'   => $start->format('H:i:s'),
+                'EndDate'     => $end->toDateString(),
+                'EndTime'     => $end->format('H:i:s'),
+                'NumIntRef'   => $numInt,
+                'Label'       => $label,
+                'Commentaire' => $commentaire,
+                'CPLivCli'    => $request->input('code_postal') ?: null,
+                'VilleLivCli' => $request->input('ville') ?: null,
+                'IsValidated' => 0,
+            ];
+
+            if ($exists) {
+                DB::table('t_planning_technicien')->where('id', $exists->id)->update($payload);
+                $mode = 'updated';
+            } else {
+                DB::table('t_planning_technicien')->insert($payload);
+                $mode = 'inserted';
+            }
+
+            DB::table('t_intervention')->updateOrInsert(
+                ['NumInt' => $numInt],
+                [
+                    'DateIntPrevu'  => $start->toDateString(),
+                    'HeureIntPrevu' => $start->format('H:i:s'),
+                    'CodeTech'      => $tech,
+                ]
+            );
+
+            return response()->json(['ok'=>true, 'mode'=>$mode]);
+        } catch (\Illuminate\Database\QueryException $qe) {
+            $ei = $qe->errorInfo ?? [];
+            return response()->json([
+                'ok'       => false,
+                'type'     => 'QueryException',
+                'sqlstate' => $ei[0] ?? null,
+                'errno'    => $ei[1] ?? null,
+                'errmsg'   => $ei[2] ?? $qe->getMessage(),
+                'file'     => basename($qe->getFile()) . ':' . $qe->getLine(),
+            ], 500);
+        } catch (\Illuminate\Validation\ValidationException $ve) {
+            return response()->json(['ok'=>false, 'errors'=>$ve->errors()], 422);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'ok'     => false,
+                'type'   => 'Throwable',
+                'errmsg' => $e->getMessage(),
+                'file'   => basename($e->getFile()) . ':' . $e->getLine(),
+            ], 500);
         }
-
-        DB::table('t_planning_technicien')->insert([
-            'CodeTech'    => $tech,
-            'StartDate'   => $start->toDateString(),
-            'StartTime'   => $start->format('H:i:s'),
-            'EndDate'     => $end->toDateString(),
-            'EndTime'     => $end->format('H:i:s'),
-            'NumIntRef'   => $numInt,
-            'Label'       => 'Intervention pour le dossier '.$numInt,
-            'Commentaire' => null,
-            'CPLivCli'    => $request->input('code_postal') ?: null,
-            'VilleLivCli' => $request->input('ville') ?: null,
-            'IsValidated' => 0, // RDV temporaire (non validé)
-        ]);
-
-        DB::table('t_intervention')->updateOrInsert(
-            ['NumInt' => $numInt],
-            [
-                'DateIntPrevu'  => $date,
-                'HeureIntPrevu' => $start->format('H:i:s'),
-                'CodeTech'      => $tech,
-            ]
-        );
-
-        return response()->json(['ok'=>true]);
     }
+
+
 
 
 
     public function validerRdv(Request $request, string $numInt)
     {
-        $data = $request->validate([
-            'rea_sal'   => ['required','string','max:5'],
-            'date_rdv'  => ['required','date_format:Y-m-d'],
-            'heure_rdv' => ['required','date_format:H:i'],
-        ]);
-
-        $tech   = $data['rea_sal'];
-        $date   = $data['date_rdv'];
-        $heure  = $data['heure_rdv'];
-        $dryRun = $request->boolean('dry_run', false);
-
-        $start  = \Carbon\Carbon::parse("$date $heure",'Europe/Paris');
-        $dateString   = $start->toDateString();       // Y-m-d
-        $timeString   = $start->format('H:i:s');      // H:i:s
-
-        // Existence d’un RDV temporaire (IsValidated = 0 ou NULL) pour même NumInt + date + heure
-        $rdvTemp = DB::table('t_planning_technicien')
-            ->where('NumIntRef', $numInt)
-            ->where('StartDate', $dateString)
-            ->where('StartTime', $timeString)
-            ->where(function($w){
-                $w->whereNull('IsValidated')->orWhere('IsValidated', 0);
-            });
-
-        $exists = $rdvTemp->exists();
-
-        if ($dryRun) {
-            return response()->json(['ok'=>true, 'exists'=>$exists]);
-        }
-
-        if (!$exists) {
-            return response()->json(['ok'=>false, 'exists'=>false], 404);
-        }
-
-        // Valide et actualise le technicien
-        DB::table('t_planning_technicien')
-            ->where('NumIntRef', $numInt)
-            ->where('StartDate', $dateString)
-            ->where('StartTime', $timeString)
-            ->update([
-                'CodeTech'    => $tech,
-                'IsValidated' => 1,
+        try {
+            $data = $request->validate([
+                'rea_sal'   => ['required','string','max:5'],
+                'date_rdv'  => ['required','date_format:Y-m-d'],
+                'heure_rdv' => ['required','date_format:H:i'],
+                'commentaire' => ['nullable','string','max:250'],
+                'code_postal' => ['nullable','string','max:10'],
+                'ville'       => ['nullable','string','max:100'],
             ]);
 
-        // Synchronise aussi t_intervention
-        DB::table('t_intervention')->updateOrInsert(
-            ['NumInt' => $numInt],
-            [
-                'DateIntPrevu'  => $dateString,
-                'HeureIntPrevu' => $timeString,
-                'CodeTech'      => $tech,
-                'DateValid'     => now('Europe/Paris')->toDateString(),
-                'HeureValid'    => now('Europe/Paris')->format('H:i:s'),
-            ]
-        );
+            $tech        = $data['rea_sal'];
+            $date        = $data['date_rdv'];
+            $heure       = $data['heure_rdv'];
+            $commentaire = trim((string)($data['commentaire'] ?? ''));
+            $cp          = $data['code_postal'] ?? null;
+            $ville       = $data['ville'] ?? null;
+            $dryRun      = $request->boolean('dry_run', false);
 
-        return response()->json(['ok'=>true, 'updated'=>true]);
+            $start = \Carbon\Carbon::parse("$date $heure",'Europe/Paris');
+            $dateString = $start->toDateString();
+            $timeString = $start->format('H:i:s');
+
+            $rdvQuery = DB::table('t_planning_technicien')
+                ->where('NumIntRef', $numInt)
+                ->where('StartDate', $dateString)
+                ->where('StartTime', $timeString)
+                ->where(function($w){
+                    $w->whereNull('IsValidated')->orWhere('IsValidated', 0);
+                });
+
+            $exists = $rdvQuery->exists();
+
+            if ($dryRun) {
+                return response()->json(['ok'=>true, 'exists'=>$exists]);
+            }
+            if (!$exists) {
+                return response()->json(['ok'=>false, 'exists'=>false], 404);
+            }
+
+            $labelComment = $commentaire !== '' ? mb_substr($commentaire, 0, 60) : '';
+            $label = trim($numInt . ' -- ' . $labelComment);
+
+            $end = (clone $start)->addHour();
+            $endDate = $end->toDateString();
+            $endTime = $end->format('H:i:s');
+
+            DB::table('t_planning_technicien')
+                ->where('NumIntRef', $numInt)
+                ->where('StartDate', $dateString)
+                ->where('StartTime', $timeString)
+                ->update([
+                    'CodeTech'    => $tech,
+                    'EndDate'     => $endDate,
+                    'EndTime'     => $endTime,
+                    'IsValidated' => 1,
+                    'Label'       => $label,
+                    'Commentaire' => $commentaire ?: null,
+                    'CPLivCli'    => $cp,
+                    'VilleLivCli' => $ville,
+                    ]);
+
+            DB::table('t_intervention')->updateOrInsert(
+                ['NumInt' => $numInt],
+                [
+                    'DateIntPrevu'  => $dateString,
+                    'HeureIntPrevu' => $timeString,
+                    'CodeTech'      => $tech,
+                    'CPLivCli'      => $cp,
+                    'VilleLivCli'   => $ville,
+                    'DateValid'     => now('Europe/Paris')->toDateString(),
+                    'HeureValid'    => now('Europe/Paris')->format('H:i:s'),
+                ]
+            );
+
+            return response()->json(['ok'=>true, 'updated'=>true]);
+
+        } catch (\Illuminate\Database\QueryException $qe) {
+            $ei = $qe->errorInfo ?? [];
+            return response()->json([
+                'ok'       => false,
+                'type'     => 'QueryException',
+                'sqlstate' => $ei[0] ?? null,
+                'errno'    => $ei[1] ?? null,
+                'errmsg'   => $ei[2] ?? $qe->getMessage(),
+                'file'     => basename($qe->getFile()) . ':' . $qe->getLine(),
+            ], 500);
+        } catch (\Illuminate\Validation\ValidationException $ve) {
+            return response()->json(['ok'=>false, 'errors'=>$ve->errors()], 422);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'ok'     => false,
+                'type'   => 'Throwable',
+                'errmsg' => $e->getMessage(),
+                'file'   => basename($e->getFile()) . ':' . $e->getLine(),
+            ], 500);
+        }
     }
+
+
 
     private function traductionBit(array $vocabulaire, string $groupeCode, string $bits): string
     {

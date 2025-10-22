@@ -231,27 +231,40 @@ window.__healthCheck = function(){
             const tech    = e.code_tech || '';
             const contact = e.contact   || '—';
             const isTemp     = (e.is_validated === false || e.is_validated === 0 || e.is_validated === '0');
-            const labelText  = (isTemp ? '[Temporaire] ' : '') + (e.label || '');
-            const trClass    = isTemp ? ' class="temporaire"' : '';
+            const labelText = (e.label || '');
+            const badge = isTemp ? '<span class="badge badge-temp" aria-label="Rendez-vous temporaire">Temporaire</span>'
+                : '<span class="badge badge-valid" aria-label="Rendez-vous validé">Validé</span>';
 
+            const trClass = isTemp ? ' class="temporaire"' : '';  // <— AJOUTER ÇA
             return `<tr data-row="rdv"${trClass}>
   <td>${escapeHtml(hhmm)}</td>
   <td>${escapeHtml(tech)}</td>
   <td>${escapeHtml(contact)}</td>
-  <td>${escapeHtml(labelText)}</td>
-  <td class="col-icon">
-    <button class="icon-btn info-btn"
-            type="button"
-            title="Informations rendez-vous"
-            aria-label="Informations rendez-vous"
-            data-type="rdv"
-            data-id="${e.id ?? ''}"
-            data-heure="${escapeHtml(hhmm)}"
-            data-tech="${escapeHtml(tech)}"
-            data-contact="${escapeHtml(contact)}"
-            data-label="${escapeHtml(labelText)}">i</button>
-  </td>
-</tr>`;
+  <td>
+      <div class="hstack-6">
+        ${badge}
+        <span>${escapeHtml(labelText)}</span>
+      </div>
+    </td>
+    <td class="col-icon">
+      <button class="icon-btn info-btn"
+        type="button"
+        title="Informations rendez-vous"
+        aria-label="Informations rendez-vous"
+        data-type="rdv"
+        data-id="${e.id ?? ''}"
+        data-heure="${escapeHtml(hhmm)}"
+        data-tech="${escapeHtml(tech)}"
+        data-contact="${escapeHtml(contact)}"
+        data-label="${escapeHtml(labelText)}"
+        data-ville="${escapeHtml(e.ville || '')}"
+        data-cp="${escapeHtml(e.cp || '')}"
+        data-marque="${escapeHtml(e.marque || '')}"
+        data-commentaire="${escapeHtml(e.commentaire || '')}"
+        data-temp="${isTemp ? '1':'0'}"
+      >i</button>
+    </td>
+  </tr>`;
         }).join('') || `<tr data-row="empty"><td colspan="5" class="note">Aucun rendez-vous</td></tr>`;
 
         calListRows.innerHTML = rows;
@@ -292,6 +305,11 @@ window.__healthCheck = function(){
                 btn.dataset.contact = e.contact || '—';
                 btn.dataset.label = e.label || '';
                 btn.textContent = 'i';
+                btn.dataset.ville = e.ville || '';
+                btn.dataset.cp = e.cp || '';
+                btn.dataset.marque = e.marque || '';
+                btn.dataset.commentaire = e.commentaire || '';
+                btn.dataset.temp = (e.is_validated === true ? '0' : '1');
 
                 // fallback local si la délégation globale ne prend pas
                 btn.addEventListener('click', function(){
@@ -426,13 +444,26 @@ window.__healthCheck = function(){
     }
     function renderRDV(btn){
         const d = btn.dataset || {};
+        const status = d.temp === '1'
+            ? '<span class="badge badge-temp">Temporaire</span>'
+            : '<span class="badge badge-valid">Validé</span>';
+
+        const adr = (d.cp || d.ville) ? `${esc(d.cp||'')} ${esc(d.ville||'')}`.trim() : '—';
+        const marque = d.marque ? esc(d.marque) : '—';
+        const commentaire = (d.commentaire||'').trim();
+
         return `
-      <h3 style="margin:0 0 10px 0;font-size:16px;">Détail du rendez-vous</h3>
-      <div><strong>Heure&nbsp;:</strong> ${esc(d.heure || '—')}</div>
-      <div><strong>Technicien&nbsp;:</strong> ${esc(d.tech || '—')}</div>
-      <div><strong>Contact&nbsp;:</strong> ${esc(d.contact || '—')}</div>
-      <div style="margin-top:8px;"><strong>Label</strong><br>${esc(d.label || '').replace(/\n/g,'<br>')}</div>
-    `;
+    <h3 style="margin:0 0 10px 0;font-size:16px;">Détail du rendez-vous</h3>
+    <div class="hstack-8" role="group" aria-label="Statut du rendez-vous">${status}</div>
+    <div style="margin-top:8px"><strong>Heure&nbsp;:</strong> ${esc(d.heure || '—')}</div>
+    <div><strong>Technicien&nbsp;:</strong> ${esc(d.tech || '—')}</div>
+    <div><strong>Contact&nbsp;:</strong> ${esc(d.contact || '—')}</div>
+    <div><strong>Marque&nbsp;:</strong> ${marque}</div>
+    <div><strong>Ville / CP&nbsp;:</strong> ${adr || '—'}</div>
+    <div style="margin-top:8px;"><strong>Commentaire (complet)</strong><br>
+      <div style="white-space:pre-wrap">${esc(commentaire)}</div>
+    </div>
+  `;
     }
 
     document.addEventListener('click', (e)=>{
@@ -516,6 +547,7 @@ window.__healthCheck = function(){
         try{
             const r1 = await fetch(urlCheck, {
                 method: 'POST',
+                credentials: 'same-origin',             // ⬅️ IMPORTANT
                 headers: {
                     'Accept': 'application/json',
                     'Content-Type': 'application/json',
@@ -557,6 +589,7 @@ window.__healthCheck = function(){
                 try{
                     const r2 = await fetch(urlCheck, {
                         method: 'POST',
+                        credentials: 'same-origin',             // ⬅️ IMPORTANT
                         headers: {
                             'Accept': 'application/json',
                             'Content-Type': 'application/json',
@@ -566,13 +599,51 @@ window.__healthCheck = function(){
                             rea_sal: tech,
                             date_rdv: date,
                             heure_rdv: heure,
+                            commentaire: document.querySelector('#commentaire')?.value || '',
+                            code_postal: document.querySelector('input[name="code_postal"]')?.value || null,
+                            ville: document.querySelector('input[name="ville"]')?.value || null,
                             dry_run: false
                         }),
                     });
                     const j2 = await r2.json().catch(()=>({ok:false}));
                     if (!r2.ok || !j2.ok) {
-                        alert("Impossible de valider/actualiser le RDV temporaire.");
-                        return;
+                        const text = await r2.text();
+                        let payload = null;
+                        try { payload = JSON.parse(text); } catch(e) {}
+
+                        if (!r2.ok || !payload?.ok) {
+                            // Cas typiques : 302 (redir), 419/401 (CSRF/session), 422 (validation), 500 (PHP)
+                            const ct = r2.headers.get('content-type') || '';
+                            const probable =
+                                r2.redirected ? 'Redirection (session expirée ? middleware check.session)' :
+                                    r2.status === 419 ? 'CSRF ou session expirée' :
+                                        r2.status === 401 ? 'Non authentifié' :
+                                            r2.status === 422 ? 'Erreurs de validation' :
+                                                r2.status === 500 ? 'Erreur serveur (exception)' :
+                                                    !ct.includes('application/json') ? 'Réponse non-JSON (souvent une page HTML de login)' :
+                                                        'Inconnue';
+
+                            // Essaie d’attraper les messages Laravel de validation si 422
+                            let validationMsg = '';
+                            if (payload && payload.errors) {
+                                validationMsg = Object.entries(payload.errors)
+                                    .map(([k, v]) => `- ${k}: ${Array.isArray(v)?v.join(', '):v}`)
+                                    .join('\n');
+                            }
+
+                            alert(
+                                [
+                                    '❌ Création RDV temporaire échouée',
+                                    `HTTP: ${r2.status}`,
+                                    `Cause probable: ${probable}`,
+                                    payload?.msg ? `Message: ${payload.msg}` : '',
+                                    validationMsg ? `Validation:\n${validationMsg}` : '',
+                                    !ct.includes('application/json') ? 'Corps (extrait HTML) :\n' + text.slice(0,400) : ''
+                                ].filter(Boolean).join('\n')
+                            );
+                            return;
+                        }
+
                     }
                     // Flag pour backend (si tu veux éviter un doublon planning dans updateIntervention)
                     const flag = document.getElementById('rdvValidatedByAjax');
@@ -610,7 +681,7 @@ window.__healthCheck = function(){
 
 
 document.getElementById('btnPlanifierRdv')?.addEventListener('click', async () => {
-    document.getElementById('actionType').value = ''; // <- reset
+    document.getElementById('actionType').value = '';
     const numInt = document.getElementById('openHistory')?.dataset.numInt;
     const tech   = document.getElementById('selAny')?.value || '';
     const date   = document.getElementById('dtPrev')?.value || '';
@@ -624,33 +695,66 @@ document.getElementById('btnPlanifierRdv')?.addEventListener('click', async () =
     const url = `/interventions/${encodeURIComponent(numInt)}/rdv/temporaire`;
     const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
 
-    const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': csrf,
-        },
-        body: JSON.stringify({
-            rea_sal: tech,
-            date_rdv: date,
-            heure_rdv: time,
-            code_postal: document.querySelector('input[name="code_postal"]')?.value || null,
-            ville: document.querySelector('input[name="ville"]')?.value || null,
-        }),
-    });
+    try {
+        const res = await fetch(url, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrf,
+            },
+            body: JSON.stringify({
+                rea_sal: tech,
+                date_rdv: date,
+                heure_rdv: time,
+                code_postal: document.querySelector('input[name="code_postal"]')?.value || null,
+                ville: document.querySelector('input[name="ville"]')?.value || null,
+                commentaire: document.querySelector('#commentaire')?.value || ''
+            }),
+        });
 
-    const out = await res.json().catch(()=>({ok:false}));
-    if (!res.ok || !out.ok) {
-        alert('Erreur lors de la création du RDV temporaire.');
-        return;
+        const raw = await res.text();
+        let out = null; try { out = JSON.parse(raw); } catch(e) {}
+
+        if (!res.ok || !out || out.ok !== true) {
+            const ct = res.headers.get('content-type') || '';
+            const probable =
+                res.status === 419 ? 'CSRF ou session expirée' :
+                    res.status === 401 ? 'Non authentifié' :
+                        res.status === 422 ? 'Erreurs de validation' :
+                            res.status === 500 ? 'Erreur serveur (exception)' :
+                                !ct.includes('application/json') ? 'Réponse non-JSON (souvent une page HTML de login)' :
+                                    'Inconnue';
+
+            let details = '';
+            if (out && out.type === 'QueryException') {
+                details = `\nSQLSTATE: ${out.sqlstate}\nErrno: ${out.errno}\nMessage: ${out.errmsg}\n@ ${out.file}`;
+            } else if (out && out.errmsg) {
+                details = `\nMessage: ${out.errmsg}\n@ ${out.file || ''}`;
+            }
+
+            alert(
+                [
+                    '❌ Création RDV temporaire échouée',
+                    `HTTP: ${res.status}`,
+                    `Cause probable: ${probable}`,
+                    details || (ct.includes('application/json') ? '' : `\nHTML/Corps (extrait):\n${raw.slice(0,400)}`)
+                ].filter(Boolean).join('\n')
+            );
+            return;
+        }
+
+        // ✅ succès
+        document.getElementById('selModeTech')?.dispatchEvent(new Event('change'));
+        document.querySelector('#commentaire').value = '';
+        alert(out.mode === 'updated' ? 'RDV temporaire mis à jour.' : 'RDV temporaire créé.');
+    } catch (e) {
+        alert(`❌ Appel réseau en échec\n${e?.name || 'Error'}: ${e?.message || e}`);
     }
-
-    // Reste sur la page et rafraîchit l’agenda côté client
-    // (force un rerender du mois courant)
-    const ev = new Event('change');
-    document.getElementById('selModeTech')?.dispatchEvent(ev);
 });
+
+
 
 
 // === Fenêtre "Historique" (popup) — sans boutons ===
