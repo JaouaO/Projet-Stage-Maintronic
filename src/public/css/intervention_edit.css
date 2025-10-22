@@ -16,7 +16,6 @@ body{ margin:0; background:var(--bg); color:var(--ink); font:14px/1.4 system-ui,
 .app{
     width:100%; max-width:1320px; margin:0 auto; padding:12px;
     display:grid; gap:var(--gap);
-    /* → droite plus large */
     grid-template-columns:minmax(360px,42%) minmax(360px,58%);
     min-height:100dvh; align-items:stretch;
 }
@@ -35,7 +34,7 @@ body{ margin:0; background:var(--bg); color:var(--ink); font:14px/1.4 system-ui,
 .box .body{ padding:8px; display:flex; flex-direction:column; gap:8px; min-height:0 }
 
 /* ===== Table (checklists, etc.) ===== */
-.table{ margin:0 } /* pas de scroll sur traitement/affectation */
+.table{ margin:0 }
 table{ width:100%; border-collapse:collapse; font-size:13px }
 th,td{ padding:5px 6px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top }
 th{ background:#f7faff; position:sticky; top:0; z-index:1 }
@@ -44,8 +43,8 @@ td.status{ text-align:center; width:66px }
 .note{ color:var(--mut); font-size:12px }
 
 /* ===== Fields (Objet / Contact réel / etc.) ===== */
-.gridObj{ display:grid; grid-template-columns:120px 1fr; gap:6px; align-items:center }
-.grid2{   display:grid; grid-template-columns:120px 1fr; gap:6px; align-items:center }
+/* Fusion : gridObj et grid2 identiques */
+.gridObj, .grid2{ display:grid; grid-template-columns:120px 1fr; gap:6px; align-items:center }
 .gridRow{ display:grid; grid-template-columns:120px 1fr 110px 1fr; gap:6px; align-items:center }
 
 input,select,textarea{
@@ -75,6 +74,18 @@ input,select,textarea{
 .right .affectationSticky #tmPrev{ max-width:160px }
 .affectationSticky thead{ display:none }
 
+/* Ligne Date/Heure : centrée et un peu plus large (dernière version) */
+.right .affectationSticky .gridRow--dt{
+    grid-template-columns: 110px minmax(0, 280px) 80px minmax(0, 220px);
+    max-width: 720px;
+    margin: 6px auto;
+    align-items: center;
+}
+.right .affectationSticky #dtPrev,
+.right .affectationSticky #tmPrev{
+    max-width: none; width: 100%;
+}
+
 /* ===== Agenda (seul qui scroll) ===== */
 .agendaBox{
     display:flex; flex-direction:column;
@@ -97,6 +108,24 @@ input,select,textarea{
 .cal-cell .dot{
     position:absolute; left:6px; bottom:6px; width:8px; height:8px; border-radius:999px; border:1px solid rgba(0,0,0,.05);
 }
+
+/* Heatmap via classes (plus d'inline styles) */
+.cal-cell.heat-0  { background:hsl(120 80% 92%); }
+.cal-cell.heat-1  { background:hsl(115 80% 91%); }
+.cal-cell.heat-2  { background:hsl(110 80% 89%); }
+.cal-cell.heat-3  { background:hsl(100 80% 86%); }
+.cal-cell.heat-4  { background:hsl(90 80% 84%); }
+.cal-cell.heat-5  { background:hsl(75 80% 80%); }
+.cal-cell.heat-6  { background:hsl(60 80% 76%); }
+.cal-cell.heat-7  { background:hsl(45 80% 72%); }
+.cal-cell.heat-8  { background:hsl(30 80% 68%); }
+.cal-cell.heat-9  { background:hsl(15 80% 65%); }
+.cal-cell.heat-10 { background:hsl(0 80% 60%); }
+
+/* Pastille selon présence d'événements */
+.cal-cell .dot { background:none; }
+.cal-cell.has-events .dot { background:#1112; }
+
 #calWrap.collapsed #calGrid{ display:none }
 
 #calHead{ display:flex; align-items:center; gap:8px; justify-content:space-between }
@@ -109,12 +138,10 @@ input,select,textarea{
 #calList .table thead th, #calList .table td{ padding:6px }
 
 /* Lignes de liste jour : RDV temporaires (non validés) */
-.cal-list tr.temporaire { background: #fff7e6; }     /* orange pâle */
+.cal-list tr.temporaire { background: #fff7e6; }
 .cal-list tr.temporaire td { border-color: #ffe2ba; }
-/* tu peux aussi styliser un badge si tu en ajoutes un plus tard */
 
-
-/* ===== Boutons (base compacte) ===== */
+/* ===== Boutons ===== */
 .btn{
     border:1px solid var(--line); background:#eef3ff;
     padding:5px 10px; border-radius:6px; cursor:pointer; line-height:1.1; font-size:13px;
@@ -123,72 +150,40 @@ input,select,textarea{
 .btn:hover{ background:#dde9ff; border-color:#b9c8e6 }
 .btn:active{ transform:translateY(1px) }
 .btn:focus-visible{ outline:2px solid #cfe0ff; outline-offset:2px; box-shadow:0 0 0 3px rgba(131,170,255,.35) }
-
-/* --- utilitaires --- */
 .btn-sm{ font-size:12px; padding:4px 9px; line-height:1.1 }
 .btn-block{ display:block; width:100% }
 
-/* --- Bouton Historique (plein largeur, un poil plus visible) --- */
+/* Bouton Historique */
 .btn-history{
-    background:#f2f7ff;
-    border-color:#a7bce8;
-    color:#214c9c;
-    font-weight:600;
-    margin:6px 0 8px;
+    background:#f2f7ff; border-color:#a7bce8; color:#214c9c; font-weight:600; margin:6px 0 8px;
 }
-.btn-history:hover{
-    background:#e6f0ff;
-    border-color:#92ace4;
-}
+.btn-history:hover{ background:#e6f0ff; border-color:#92ace4 }
 
-/* --- Boutons d’action (classes dédiées) --- */
+/* Boutons d’action */
 .btn-validate{
-    background:var(--acc-green-bg);
-    border-color:var(--acc-green-brd);
-    color:var(--acc-green-fg);
-    font-weight:600;
+    background:var(--acc-green-bg); border-color:var(--acc-green-brd); color:var(--acc-green-fg); font-weight:600;
 }
-.btn-validate:hover{
-    background:var(--acc-green-hov);
-    border-color:#0a4c2d;
-    color:#0a4c2d;
-}
+.btn-validate:hover{ background:var(--acc-green-hov); border-color:#0a4c2d; color:#0a4c2d; }
 
-/* RDV (ambre) */
 .btn-plan-rdv{
-    background:var(--acc-amber-bg);
-    border-color:var(--acc-amber-brd);
-    color:var(--acc-amber-fg);
+    background:var(--acc-amber-bg); border-color:var(--acc-amber-brd); color:var(--acc-amber-fg);
 }
 .btn-plan-rdv:hover{
-    background:var(--acc-amber-hov);
-    border-color:#d6a139;
-    color:#5e4300;
+    background:var(--acc-amber-hov); border-color:#d6a139; color:#5e4300;
 }
-
-/* Nouvel appel (bleu) */
 .btn-plan-call{
-    background:var(--acc-blue-bg);
-    border-color:var(--acc-blue-brd);
-    color:var(--acc-blue-fg);
+    background:var(--acc-blue-bg); border-color:var(--acc-blue-brd); color:var(--acc-blue-fg);
 }
 .btn-plan-call:hover{
-    background:var(--acc-blue-hov);
-    border-color:#5f97ff;
-    color:#163c84;
+    background:var(--acc-blue-hov); border-color:#5f97ff; color:#163c84;
 }
-
-
 
 /* ===== Réduire la hauteur de “Commentaire” et “Traitement” ===== */
-/* Proposition A (activée) : pas de scroll interne, boîtes non extensibles */
-.center .box:first-of-type,        /* Traitement du dossier (1ère box colonne centre) */
-.center .mserv{                    /* Commentaire */
-    flex:0 0 auto;                   /* ne pas prendre la hauteur dispo */
+.center .box:first-of-type,
+.center .mserv{
+    flex:0 0 auto;
 }
-.center .mserv .body input#commentaire{ height:34px } /* juste la zone d’écriture */
-
-
+.center .mserv .body input#commentaire{ height:34px }
 
 /* ===== Utils ===== */
 .mt6{ margin-top:6px } .mt8{ margin-top:8px }
@@ -196,7 +191,14 @@ input,select,textarea{
 .hstack-6{ display:flex; gap:6px; align-items:center }
 .ml-auto{ margin-left:auto }
 .is-hidden{ display:none !important }
-.w-150{ width:150px } .w-66{ width:66px } .w-80{ width:80px } .w-200{ width:200px }
+.w-150{ width:150px } .w-66{ width:66px } .w-80{ width:80px } .w-200{ width:200px } .w-40{ width:40px }
+.cell-center{ text-align:center; }
+.cell-p6{ padding:6px 8px; }
+.cell-p8-10{ padding:8px 10px; }
+.m-12{ margin:12px; }
+.prewrap{ white-space:pre-wrap; }
+.section{ margin-top:8px; }
+.section-title{ font-weight:600; margin:0 0 6px 0; }
 
 /* ===== Modal ===== */
 #infoModal{ display:none; position:fixed; inset:0; z-index:2147483647; background:rgba(0,0,0,.45) }
@@ -211,6 +213,19 @@ input,select,textarea{
 }
 #infoModal .close:hover{ color:#000 }
 
+/* Modale / Historique titres & détails */
+.modal-title{ margin:0 0 10px 0; font-size:16px; }
+.meta{ margin-top:4px; }
+
+.row-main{ border-bottom:1px solid #f0f0f0; }
+.row-details{ display:none; }
+.row-details.is-open{ display:table-row; }
+.hist-details-cell{
+    padding:10px 12px; background:#fafafa; border-bottom:1px solid #eee;
+}
+.sep{ border:none; border-top:1px solid #e5e7eb; margin:10px 0; }
+.grid-2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+
 /* ===== Icons ===== */
 .col-icon{ width:28px; text-align:center; border-left:1px solid var(--line) }
 .icon-btn{
@@ -220,27 +235,14 @@ input,select,textarea{
 }
 .icon-btn:focus{ outline:2px solid #cfe0ff; outline-offset:1px }
 
-/* Ligne Date/Heure : centrée et un peu plus large */
-.right .affectationSticky .gridRow--dt{
-    grid-template-columns: 110px minmax(0, 280px) 80px minmax(0, 220px);
-    /* + de place qu'avant (560px) */
-    max-width: 720px;
-    margin: 6px auto;              /* centre la grille */
-    align-items: center;
-}
-/* Retire les anciennes limites étroites si présentes */
-.right .affectationSticky #dtPrev,
-.right .affectationSticky #tmPrev{
-    max-width: none;
-    width: 100%;
-}
-
+/* Badges & chips */
 .badge{
     display:inline-block; padding:2px 6px; border-radius:999px;
     font-size:11px; line-height:1.2; border:1px solid var(--line);
 }
 .badge-temp{ background:#fff5dc; border-color:#e6b34e; color:#7a5400; }
 .badge-valid{ background:#e9f8ef; border-color:#0d6b2d; color:#0d6b2d; }
+.badge-call{ background:#e9f2ff; border-color:#7aa7ff; color:#214c9c; }
 
 .badge-obj{
     display:inline-block; padding:2px 6px; border-radius:999px;
@@ -259,9 +261,30 @@ input,select,textarea{
 .chip-green{ background:#e9f8ef; border-color:#0d6b2d; color:#0d6b2d; }
 .chip-amber{ background:#fff5dc; border-color:#e6b34e; color:#7a5400; }
 
-.badge-call{
-    background:#e9f2ff; border-color:#7aa7ff; color:#214c9c;
-}
+
+/* modale (contenus génériques) */
+.modal-title { margin:0 0 10px 0; font-size:16px; font-weight:600; }
+.modal-list  { margin:8px 0 12px 16px; padding-left:10px; list-style:disc; }
+.flex-wrap   { flex-wrap: wrap; }
+.prewrap     { white-space: pre-wrap; }
+.meta        { margin-top:8px; }
+.section     { margin-top:8px; }
+.section-title { font-weight:600; margin-bottom:6px; }
+
+/* Historique (popup) — détails repliés par défaut */
+.row-details { display: none; }
+
+/* petites utilités utilisées dans la popup */
+.w-40 { width: 40px }
+.m-12 { margin: 12px }
+.prewrap { white-space: pre-wrap }
+.cell-center { text-align: center }
+.cell-p6 { padding: 6px }
+.cell-p8-10 { padding: 8px 10px }
+.sep { border: none; border-top: 1px solid #e5e7eb; margin: 10px 0 }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px }
+.hist-details-cell { background:#fafafa; border-bottom:1px solid #eee }
+.hist-title { margin:6px 0 12px 0; }
 
 
 

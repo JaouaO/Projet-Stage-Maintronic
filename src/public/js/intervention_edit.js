@@ -1,19 +1,12 @@
-;(() => { /* placeholder */
-})();
+;(() => { /* placeholder */ })();
 
 // ===== DEBUG CORE =====
 window.__DBG = window.__DBG || {
     ON: true, // passe à false pour couper les logs
     pfx: '[INTV]',
-    log() {
-        if (this.ON) console.log(this.pfx, ...arguments);
-    },
-    warn() {
-        if (this.ON) console.warn(this.pfx, ...arguments);
-    },
-    err() {
-        if (this.ON) console.error(this.pfx, ...arguments);
-    },
+    log() { if (this.ON) console.log(this.pfx, ...arguments); },
+    warn() { if (this.ON) console.warn(this.pfx, ...arguments); },
+    err() { if (this.ON) console.error(this.pfx, ...arguments); },
     expect(sel, label) {
         const el = document.querySelector(sel);
         this.log('expect', label || sel, !!el, el);
@@ -39,6 +32,8 @@ window.__healthCheck = function () {
     const z = getComputedStyle(document.querySelector('.modal') || document.body).zIndex;
     __DBG.log('modal z-index =', z);
 };
+
+// --- util : verrou bouton
 function withBtnLock(btn, fn){
     if (!btn) return fn();
     if (btn.dataset.lock === '1') return;
@@ -66,7 +61,6 @@ function withBtnLock(btn, fn){
         return res;
     }
 }
-
 
 // --- Horloge serveur (span #srvDateTimeText) ---
 (function () {
@@ -122,29 +116,15 @@ function withBtnLock(btn, fn){
     let view = new Date();
     view.setDate(1);
 
-    // Heat color: green -> red
-    const heat = (val, max) => {
-        if (!max) return '#ffffff';
-        const t = Math.max(0, Math.min(1, val / max));
-        const hue = Math.round(120 * (1 - t));
-        const sat = 80, light = 92 - Math.round(35 * t);
-        return `hsl(${hue} ${sat}% ${light}%)`;
-    };
-
     async function fetchRange(code, from, to) {
         const urlBase = API_ROUTE.replace('__X__', encodeURIComponent(code));
         const url = `${urlBase}?from=${from}&to=${to}&id=${encodeURIComponent(SESSION_ID)}`;
         const res = await fetch(url, {headers: {'Accept': 'application/json'}});
         const txt = await res.text();
         let data = null;
-        try {
-            data = JSON.parse(txt);
-        } catch (e) {
-        }
+        try { data = JSON.parse(txt); } catch (e) {}
         __DBG.log('fetchRange', {
-            code,
-            from,
-            to,
+            code, from, to,
             ok: !!(data && data.ok === true),
             status: res.status,
             count: (data && data.events ? data.events.length : 'n/a')
@@ -231,11 +211,13 @@ function withBtnLock(btn, fn){
             const inMonth = day.getMonth() === view.getMonth();
             const key = ymd(day);
             const meta = byDay[key] || {count: 0, items: []};
-            const bg = heat(meta.count, maxCount);
-            html += `<div class="cal-cell ${inMonth ? '' : 'muted'}" data-date="${key}" style="background:${bg}">
-        <span class="d">${day.getDate()}</span>
-        <span class="dot" title="${meta.count} RDV" style="background:${meta.count ? '#1112' : ''}"></span>
-      </div>`;
+            const level = maxCount ? Math.min(10, Math.round((meta.count / maxCount) * 10)) : 0;
+
+            html += `
+        <div class="cal-cell ${inMonth ? '' : 'muted'} heat-${level} ${meta.count ? 'has-events' : ''}" data-date="${key}">
+          <span class="d">${day.getDate()}</span>
+          <span class="dot" title="${meta.count} RDV"></span>
+        </div>`;
         }
         calGrid.innerHTML = html;
         BYDAY = byDay;
@@ -280,39 +262,40 @@ function withBtnLock(btn, fn){
             const contact = e.contact || '—';
             const isTemp = (e.is_validated === false || e.is_validated === 0 || e.is_validated === '0');
             const labelText = (e.label || '');
-            const badge = isTemp ? '<span class="badge badge-temp" aria-label="Rendez-vous temporaire">Temporaire</span>'
+            const badge = isTemp
+                ? '<span class="badge badge-temp" aria-label="Rendez-vous temporaire">Temporaire</span>'
                 : '<span class="badge badge-valid" aria-label="Rendez-vous validé">Validé</span>';
 
-            const trClass = isTemp ? ' class="temporaire"' : '';  // <— AJOUTER ÇA
+            const trClass = isTemp ? ' class="temporaire"' : '';
             return `<tr data-row="rdv"${trClass}>
   <td>${escapeHtml(hhmm)}</td>
   <td>${escapeHtml(tech)}</td>
   <td>${escapeHtml(contact)}</td>
   <td>
-      <div class="hstack-6">
-        ${badge}
-        <span>${escapeHtml(labelText)}</span>
-      </div>
-    </td>
-    <td class="col-icon">
-      <button class="icon-btn info-btn"
-        type="button"
-        title="Informations rendez-vous"
-        aria-label="Informations rendez-vous"
-        data-type="rdv"
-        data-id="${e.id ?? ''}"
-        data-heure="${escapeHtml(hhmm)}"
-        data-tech="${escapeHtml(tech)}"
-        data-contact="${escapeHtml(contact)}"
-        data-label="${escapeHtml(labelText)}"
-        data-ville="${escapeHtml(e.ville || '')}"
-        data-cp="${escapeHtml(e.cp || '')}"
-        data-marque="${escapeHtml(e.marque || '')}"
-        data-commentaire="${escapeHtml(e.commentaire || '')}"
-        data-temp="${isTemp ? '1' : '0'}"
-      >i</button>
-    </td>
-  </tr>`;
+    <div class="hstack-6">
+      ${badge}
+      <span>${escapeHtml(labelText)}</span>
+    </div>
+  </td>
+  <td class="col-icon">
+    <button class="icon-btn info-btn"
+      type="button"
+      title="Informations rendez-vous"
+      aria-label="Informations rendez-vous"
+      data-type="rdv"
+      data-id="${e.id ?? ''}"
+      data-heure="${escapeHtml(hhmm)}"
+      data-tech="${escapeHtml(tech)}"
+      data-contact="${escapeHtml(contact)}"
+      data-label="${escapeHtml(labelText)}"
+      data-ville="${escapeHtml(e.ville || '')}"
+      data-cp="${escapeHtml(e.cp || '')}"
+      data-marque="${escapeHtml(e.marque || '')}"
+      data-commentaire="${escapeHtml(e.commentaire || '')}"
+      data-temp="${isTemp ? '1' : '0'}"
+    >i</button>
+  </td>
+</tr>`;
         }).join('') || `<tr data-row="empty"><td colspan="5" class="note">Aucun rendez-vous</td></tr>`;
 
         calListRows.innerHTML = rows;
@@ -359,7 +342,6 @@ function withBtnLock(btn, fn){
                 btn.dataset.commentaire = e.commentaire || '';
                 btn.dataset.temp = (e.is_validated === true ? '0' : '1');
 
-                // fallback local si la délégation globale ne prend pas
                 btn.addEventListener('click', function () {
                     window.__openInfoFromButton && window.__openInfoFromButton(btn);
                 });
@@ -391,7 +373,6 @@ function withBtnLock(btn, fn){
         const base = lastShownKey ? keyToDate(lastShownKey) : new Date();
         const next = new Date(base.getFullYear(), base.getMonth(), base.getDate() + 1);
         const nextKey = ymd(next);
-
         const monthChanged = (next.getMonth() !== view.getMonth()) || (next.getFullYear() !== view.getFullYear());
         if (monthChanged) {
             view = new Date(next.getFullYear(), next.getMonth(), 1);
@@ -412,12 +393,8 @@ function withBtnLock(btn, fn){
         showDay(prevKey, BYDAY);
     }
 
-    dayNext?.addEventListener('click', () => {
-        goNextDay();
-    });
-    dayPrev?.addEventListener('click', () => {
-        goPrevDay();
-    });
+    dayNext?.addEventListener('click', () => { goNextDay(); });
+    dayPrev?.addEventListener('click', () => { goPrevDay(); });
 
     function setCollapsed(on) {
         if (!calWrap) return;
@@ -425,9 +402,6 @@ function withBtnLock(btn, fn){
         if (calToggle) {
             calToggle.textContent = on ? '▸ Mois' : '▾ Mois';
             calToggle.setAttribute('aria-expanded', (!on).toString());
-        }
-        if (on && !lastShownKey) {
-            // fallback via render()
         }
     }
 
@@ -503,7 +477,7 @@ function withBtnLock(btn, fn){
         const date = (tds?.[0]?.textContent || '—').trim();
         const html = (tds?.[1]?.innerHTML || '').trim();
         return `
-      <h3 style="margin:0 0 10px 0;font-size:16px;">Suivi du ${esc(date)}</h3>
+      <h3 class="modal-title">Suivi du ${esc(date)}</h3>
       <div>${html}</div>
     `;
     }
@@ -519,15 +493,16 @@ function withBtnLock(btn, fn){
         const commentaire = (d.commentaire || '').trim();
 
         return `
-    <h3 style="margin:0 0 10px 0;font-size:16px;">Détail du rendez-vous</h3>
+    <h3 class="modal-title">Détail du rendez-vous</h3>
     <div class="hstack-8" role="group" aria-label="Statut du rendez-vous">${status}</div>
-    <div style="margin-top:8px"><strong>Heure&nbsp;:</strong> ${esc(d.heure || '—')}</div>
-    <div><strong>Technicien&nbsp;:</strong> ${esc(d.tech || '—')}</div>
-    <div><strong>Contact&nbsp;:</strong> ${esc(d.contact || '—')}</div>
-    <div><strong>Marque&nbsp;:</strong> ${marque}</div>
-    <div><strong>Ville / CP&nbsp;:</strong> ${adr || '—'}</div>
-    <div style="margin-top:8px;"><strong>Commentaire (complet)</strong><br>
-      <div style="white-space:pre-wrap">${esc(commentaire)}</div>
+    <div class="meta"><strong>Heure&nbsp;:</strong> ${esc(d.heure || '—')}</div>
+    <div class="meta"><strong>Technicien&nbsp;:</strong> ${esc(d.tech || '—')}</div>
+    <div class="meta"><strong>Contact&nbsp;:</strong> ${esc(d.contact || '—')}</div>
+    <div class="meta"><strong>Marque&nbsp;:</strong> ${marque}</div>
+    <div class="meta"><strong>Ville / CP&nbsp;:</strong> ${adr || '—'}</div>
+    <div class="section">
+      <div class="section-title">Commentaire (complet)</div>
+      <div class="prewrap">${esc(commentaire)}</div>
     </div>
   `;
     }
@@ -549,7 +524,6 @@ function withBtnLock(btn, fn){
     window.MODAL = {open, close};
 })();
 
-
 // Planifier un nouvel appel => pas d'ajout RDV
 (function () {
     const form = document.getElementById('interventionForm');
@@ -561,14 +535,10 @@ function withBtnLock(btn, fn){
     btnCall.addEventListener('click', (ev) => {
         withBtnLock(ev.currentTarget, () => {
             actionType.value = 'call';
-            // Optionnel: on ignore date/heure du formulaire pour ne pas laisser croire qu'on va planifier
-            // document.getElementById('dtPrev')?.value = '';
-            // document.getElementById('tmPrev')?.value = '';
             form.requestSubmit();
         });
     });
 })();
-
 
 // Valider le prochain RDV : propose Remplacer / Valider quand même / Modifier avant de valider
 (function () {
@@ -577,7 +547,6 @@ function withBtnLock(btn, fn){
     const numInt = document.getElementById('openHistory')?.dataset.numInt || '';
     const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
 
-    // Modale réutilisée
     const modal = document.getElementById('infoModal');
     const modalBody = document.getElementById('infoModalBody');
     const modalX = document.getElementById('infoModalClose');
@@ -588,26 +557,23 @@ function withBtnLock(btn, fn){
         modal.classList.add('is-open');
         modal.setAttribute('aria-hidden', 'false');
     }
-
     function closeModal() {
         if (!modal || !modalBody) return;
         modal.classList.remove('is-open');
         modal.setAttribute('aria-hidden', 'true');
         modalBody.innerHTML = '';
     }
-
     modalX?.addEventListener('click', closeModal);
 
     if (!btn || !form) return;
 
     btn.addEventListener('click',(ev) => {
         withBtnLock(ev.currentTarget, async () => {
-            document.getElementById('actionType').value = 'validate_rdv'; // facultatif
+            document.getElementById('actionType').value = 'validate_rdv';
             const tech = document.getElementById('selAny')?.value || '';
             const date = document.getElementById('dtPrev')?.value || '';
             const heure = document.getElementById('tmPrev')?.value || '';
 
-            // Si des champs manquent => submit classique
             if (!numInt || !tech || !date || !heure) {
                 form.requestSubmit();
                 return;
@@ -629,7 +595,6 @@ function withBtnLock(btn, fn){
                 const hasTemps = !!(j1 && j1.ok && (j1.count || 0) > 0);
 
                 if (!hasTemps) {
-                    // => aucun temp : on valide tranquillement
                     form.requestSubmit();
                     return;
                 }
@@ -639,24 +604,19 @@ function withBtnLock(btn, fn){
                     const hhmm = (it.StartTime || '').slice(0, 5);
                     const dfr = (it.StartDate || '').split('-').reverse().join('/');
                     const tech = it.CodeTech || '';
-                    const lab = (it.Label || '').replace(/[<>&"]/g, s => ({
-                        '<': '&lt;',
-                        '>': '&gt;',
-                        '&': '&amp;',
-                        '"': '&quot;'
-                    }[s]));
+                    const lab = (it.Label || '').replace(/[<>&"]/g, s => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[s]));
                     return `<li><code>${dfr} ${hhmm}</code> · <strong>${tech}</strong> — ${lab}</li>`;
                 }).join('');
 
                 const html = `
       <div>
-        <h3 style="margin:0 0 10px 0;font-size:16px;">RDV temporaires existants</h3>
+        <h3 class="modal-title">RDV temporaires existants</h3>
         <p>Des rendez-vous <em>temporaires</em> sont présents sur ce dossier&nbsp;:</p>
         <ul style="margin:8px 0 12px 16px; padding-left:10px; list-style:disc;">
           ${listHtml}
         </ul>
         <p>Que souhaites-tu faire&nbsp;?</p>
-        <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;">
+        <div class="hstack-8" style="flex-wrap:wrap;">
           <button id="optPurgeThenValidate" class="btn ok" type="button" title="Supprimer tous les temporaires puis valider">Supprimer les temporaires puis valider</button>
           <button id="optValidateAnyway" class="btn" type="button" title="Conserver les temporaires et valider quand même">Valider sans supprimer</button>
           <button id="optCancel" class="btn" type="button" title="Annuler">Annuler</button>
@@ -672,11 +632,7 @@ function withBtnLock(btn, fn){
                             const r2 = await fetch(urlPurge, {
                                 method: 'POST',
                                 credentials: 'same-origin',
-                                headers: {
-                                    'Accept': 'application/json',
-                                    'Content-Type': 'application/json',
-                                    'X-CSRF-TOKEN': csrf
-                                },
+                                headers: {'Accept': 'application/json','Content-Type': 'application/json','X-CSRF-TOKEN': csrf},
                                 body: JSON.stringify({})
                             });
                             const j2 = await r2.json().catch(() => ({ok: false, deleted: 0}));
@@ -684,11 +640,9 @@ function withBtnLock(btn, fn){
                                 alert('❌ Échec de la suppression des RDV temporaires.');
                                 return;
                             }
-                            // rafraîchir l’agenda (optionnel) puis submit
                             document.getElementById('selModeTech')?.dispatchEvent(new Event('change'));
                             closeModal();
                             form.requestSubmit();
-
                         } catch (e) {
                             console.error('[purge temporaires] erreur', e);
                             alert('❌ Erreur lors de la suppression des RDV temporaires.');
@@ -711,15 +665,13 @@ function withBtnLock(btn, fn){
 
             } catch (e) {
                 console.error('[Valider RDV] erreur', e);
-                // En cas d’erreur réseau, on ne bloque pas la validation
                 form.requestSubmit();
             }
         });
     });
-
 })();
 
-
+// Planifier un rendez-vous (RDV temporaire)
 document.getElementById('btnPlanifierRdv')?.addEventListener('click',(ev) => {
     withBtnLock(ev.currentTarget, async () => {
         document.getElementById('actionType').value = '';
@@ -740,11 +692,7 @@ document.getElementById('btnPlanifierRdv')?.addEventListener('click',(ev) => {
             const res = await fetch(url, {
                 method: 'POST',
                 credentials: 'same-origin',
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': csrf,
-                },
+                headers: {'Accept': 'application/json','Content-Type': 'application/json','X-CSRF-TOKEN': csrf},
                 body: JSON.stringify({
                     rea_sal: tech,
                     date_rdv: date,
@@ -756,11 +704,7 @@ document.getElementById('btnPlanifierRdv')?.addEventListener('click',(ev) => {
             });
 
             const raw = await res.text();
-            let out = null;
-            try {
-                out = JSON.parse(raw);
-            } catch (e) {
-            }
+            let out = null; try { out = JSON.parse(raw); } catch (e) {}
 
             if (!res.ok || !out || out.ok !== true) {
                 const ct = res.headers.get('content-type') || '';
@@ -792,7 +736,8 @@ document.getElementById('btnPlanifierRdv')?.addEventListener('click',(ev) => {
 
             // ✅ succès
             document.getElementById('selModeTech')?.dispatchEvent(new Event('change'));
-            document.querySelector('#commentaire').value = '';
+            const c = document.querySelector('#commentaire');
+            if (c) c.value = '';
             alert(out.mode === 'updated' ? 'RDV temporaire mis à jour.' : 'RDV temporaire créé.');
         } catch (e) {
             alert(`❌ Appel réseau en échec\n${e?.name || 'Error'}: ${e?.message || e}`);
@@ -800,8 +745,7 @@ document.getElementById('btnPlanifierRdv')?.addEventListener('click',(ev) => {
     });
 });
 
-
-// === Fenêtre "Historique" (popup) — sans boutons ===
+// === Fenêtre "Historique" (popup) — sans CSS inline ===
 (function () {
     const btn = document.getElementById('openHistory');
     if (!btn) return;
@@ -819,7 +763,6 @@ document.getElementById('btnPlanifierRdv')?.addEventListener('click',(ev) => {
             return;
         }
 
-        // Récupère le HTML du template
         let inner = '';
         if (tpl.content && tpl.content.cloneNode) {
             const frag = tpl.content.cloneNode(true);
@@ -829,23 +772,15 @@ document.getElementById('btnPlanifierRdv')?.addEventListener('click',(ev) => {
         }
         if (!inner) {
             console.error('[HIST] Le template est vide');
-            inner = '<p style="color:#b00">Aucun contenu trouvé pour l’historique.</p>';
+            inner = '<p class="note">Aucun contenu trouvé pour l’historique.</p>';
         }
 
         // Adapter les classes pour réutiliser la feuille CSS existante
         inner = inner.replace(/class="hist-table"/g, 'class="table"');
 
-        // URL absolue du CSS existant (celui déjà chargé dans la page)
         const cssHref = document.querySelector('link[rel="stylesheet"][href*="intervention_edit.css"]')?.href || '';
-
-        // Numéro d'intervention via data-num-int du bouton
         const numInt = btn.dataset.numInt || '';
-        const safeNum = numInt ? String(numInt).replace(/[<>&"]/g, s => ({
-            '<': '&lt;',
-            '>': '&gt;',
-            '&': '&amp;',
-            '"': '&quot;'
-        }[s])) : '';
+        const safeNum = numInt ? String(numInt).replace(/[<>&"]/g, s => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[s])) : '';
 
         const html = `
 <!doctype html>
@@ -857,7 +792,7 @@ document.getElementById('btnPlanifierRdv')?.addEventListener('click',(ev) => {
   ${cssHref ? `<link rel="stylesheet" href="${cssHref}">` : ''}
 </head>
 <body>
-  <div class="box" style="margin:12px">
+  <div class="box m-12">
     <div class="body">
       <div class="table">
         ${inner}
@@ -867,15 +802,16 @@ document.getElementById('btnPlanifierRdv')?.addEventListener('click',(ev) => {
   <script>
     console.log('[HIST] popup chargée (CSS externe OK)');
     document.addEventListener('click', function(e){
-      const btn = e.target.closest('.hist-toggle');
-      if(!btn) return;
-      const tr = btn.closest('tr');
-      const next = tr && tr.nextElementSibling;
-      if(!next || !next.matches('.row-details')) return;
-      const open = next.style.display !== 'none';
-      next.style.display = open ? 'none' : '';
-      btn.textContent = open ? '+' : '−';
-      btn.setAttribute('aria-expanded', (!open).toString());
+     const btn = e.target.closest('.hist-toggle');
+  if(!btn) return;
+  const tr = btn.closest('tr');
+  const next = tr && tr.nextElementSibling;
+  if(!next || !next.matches('.row-details')) return;
+
+  const isOpen = next.classList.contains('is-open');
+  next.classList.toggle('is-open', !isOpen);            // <-- on toggle une classe
+  btn.textContent = isOpen ? '+' : '−';
+  btn.setAttribute('aria-expanded', (!isOpen).toString());
     });
   <\/script>
 </body>
@@ -891,14 +827,13 @@ document.getElementById('btnPlanifierRdv')?.addEventListener('click',(ev) => {
     });
 })();
 
-
+// Empêcher date/heure passées
 (function enforceNoPast() {
     const d = document.getElementById('dtPrev');
     const t = document.getElementById('tmPrev');
 
     if (!d || !t) return;
 
-    // min = aujourd'hui
     const now = new Date();
     const pad = n => (n < 10 ? '0' : '') + n;
     const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
@@ -906,10 +841,8 @@ document.getElementById('btnPlanifierRdv')?.addEventListener('click',(ev) => {
     d.min = today;
 
     function applyTimeMin() {
-        // Si la date choisie est aujourd'hui -> min = heure courante, sinon min libre
         if (d.value === today) {
             t.min = hhmm;
-            // Si l'heure choisie est passée, on la pousse à maintenant
             if (t.value && t.value < hhmm) t.value = hhmm;
         } else {
             t.removeAttribute('min');
@@ -917,18 +850,16 @@ document.getElementById('btnPlanifierRdv')?.addEventListener('click',(ev) => {
     }
 
     d.addEventListener('change', applyTimeMin);
-    // au chargement
     applyTimeMin();
 })();
 
-
+// Lock submit anti-double-clic global
 (function(){
     const form = document.getElementById('interventionForm');
     if (!form) return;
     form.addEventListener('submit', (e) => {
         if (form.dataset.lock === '1') { e.preventDefault(); return; }
         form.dataset.lock = '1';
-        // Le rechargement page lèvera ce lock ; au cas où validation serveur et on reste ici :
         setTimeout(()=>{ form.dataset.lock = ''; }, 1500);
     });
 })();

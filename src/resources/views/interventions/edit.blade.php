@@ -28,8 +28,8 @@
                         <span class="note">{{ $data->NomSal ?? ($data->CodeSal ?? '—') }}</span>
                     </div>
                     <div class="body">
-                        {{-- Objet sur toute la ligne --}}
-                        <div class="gridObj">
+                        {{-- Objet sur toute la ligne (fusion avec grid2) --}}
+                        <div class="grid2">
                             <label>Objet</label>
                             <div class="ro">{{ $objetTrait ?: '—' }}</div>
                         </div>
@@ -50,7 +50,6 @@
                             Ouvrir l’historique
                         </button>
 
-
                         {{-- Checklist TRAITEMENT --}}
                         <div class="table mt6">
                             <table>
@@ -60,7 +59,6 @@
                                     <tr>
                                         <td>{{ $trait['label'] }}</td>
                                         <td class="status">
-                                            {{-- valeur par défaut 0 si non coché --}}
                                             <input type="hidden" name="traitement[{{ $trait['code'] }}]" value="0">
                                             <input type="checkbox"
                                                    name="traitement[{{ $trait['code'] }}]"
@@ -77,24 +75,19 @@
                             </table>
                         </div>
                     </div>
-
-
                 </div>
 
-
-                {{-- Gabarit HTML injecté dans la nouvelle fenêtre --}}
+                {{-- Gabarit HTML injecté dans la nouvelle fenêtre (sans CSS inline) --}}
                 <template id="tplHistory">
                     <div class="hist-wrap">
-                        <h2 style="margin:6px 0 12px 0;">Historique du dossier {{ $interv->NumInt }}</h2>
-                        <table class="hist-table" style="width:100%;border-collapse:collapse">
+                        <h2 class="hist-title">Historique du dossier {{ $interv->NumInt }}</h2>
+                        <table class="hist-table table">
                             <thead>
                             <tr>
-                                <th style="width:150px;text-align:left;border-bottom:1px solid #ddd;">Date</th>
-                                <th style="text-align:left;border-bottom:1px solid #ddd;">Résumé</th>
-                                <th style="width:200px;text-align:left;border-bottom:1px solid #ddd;">Rendez-vous /
-                                    Appel
-                                </th>
-                                <th style="width:40px;border-bottom:1px solid #ddd;"></th>
+                                <th class="w-150">Date</th>
+                                <th>Résumé</th>
+                                <th class="w-200">Rendez-vous / Appel</th>
+                                <th class="w-40"></th>
                             </tr>
                             </thead>
                             <tbody>
@@ -102,14 +95,13 @@
                                 @php
                                     $dateTxt = '—';
 
-                                    // Ligne courte = 1ère ligne du texte
                                     $raw = (string)($suivi->Texte ?? '');
                                     $resumeLine = trim(preg_split('/\R/', $raw, 2)[0] ?? '');
                                     $resumeClean = rtrim($resumeLine, " \t—–-:;.,");
-
+                                    $resumeShort = \Illuminate\Support\Str::limit($resumeClean !== '' ? $resumeClean : '—', 60, '…');
                                     $objet = trim((string)($suivi->Titre ?? ''));
                                     $auteur = trim((string)($suivi->CodeSalAuteur ?? ''));
-                                    // meta lisibles
+
                                     $evtType = $suivi->evt_type ?? null;
                                     $meta = [];
                                     if (!empty($suivi->evt_meta)) {
@@ -117,12 +109,11 @@
                                         catch (\Throwable $e) { $meta = []; }
                                     }
 
-                                    $dateIso = $meta['date'] ?? null;                 // "YYYY-MM-DD"
+                                    $dateIso = $meta['date'] ?? null; // YYYY-MM-DD
                                     if ($dateIso && preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateIso)) {
                                         $parts = explode('-', $dateIso);
-                                        $dateTxt = $parts[2].'/'.$parts[1].'/'.$parts[0]; // JJ/MM/AAAA
+                                        $dateTxt = $parts[2].'/'.$parts[1].'/'.$parts[0];
                                     }
-
                                     $heure = $meta['heure'] ?? null;
                                     $tech  = $meta['tech']  ?? null;
 
@@ -136,35 +127,27 @@
 
                                     if ($evtLabel) {
                                         $parts = [];
-                                        if ($dateTxt && $heure) {
-                                            $parts[] = $dateTxt.' à '.$heure;
-                                        } elseif ($dateTxt) {
-                                            $parts[] = $dateTxt;
-                                        } elseif ($heure) {
-                                            $parts[] = $heure;
-                                        }
+                                        if ($dateTxt && $heure)      { $parts[] = $dateTxt.' à '.$heure; }
+                                        elseif ($dateTxt)            { $parts[] = $dateTxt; }
+                                        elseif ($heure)              { $parts[] = $heure; }
                                         if ($tech) $parts[] = $tech;
                                         if (!empty($parts)) $evtLabel .= ' — ' . implode(' · ', $parts);
                                     }
+                                @endphp
 
-                                    // Texte brut d'origine (inchangé)
-                                    $raw = (string)($suivi->Texte ?? '');
-                                                                @endphp
-
-
-                                <tr class="row-main" data-row="main" style="border-bottom:1px solid #f0f0f0;">
-                                    <td style="padding:6px 8px;">{{ $dateTxt }}</td>
-                                    <td style="padding:6px 8px;">
+                                <tr class="row-main" data-row="main">
+                                    <td class="cell-p6">{{ $dateTxt }}</td>
+                                    <td class="cell-p6" title="{{ $resumeClean }}">
                                         @if($auteur !== '')
                                             <strong>{{ $auteur }}</strong> —
                                         @endif
                                         @if($objet  !== '')
                                             <em>{{ $objet }}</em> —
                                         @endif
-                                        {{ $resumeClean !== '' ? $resumeClean : '—' }}
+                                            {{ $resumeShort }}
                                     </td>
 
-                                    <td style="padding:6px 8px;">
+                                    <td class="cell-p6">
                                         @if($evtLabel)
                                             <span class="badge {{ $evtClass }}">{{ $evtLabel }}</span>
                                         @else
@@ -172,18 +155,15 @@
                                         @endif
                                     </td>
 
-
-                                    <td style="padding:6px 8px;text-align:center;">
+                                    <td class="cell-p6 cell-center">
                                         <button class="hist-toggle" type="button" aria-expanded="false"
                                                 title="Afficher le détail">+
                                         </button>
                                     </td>
                                 </tr>
 
-                                <tr class="row-details" data-row="details" style="display:none;">
-                                    <td colspan="3"
-                                        style="padding:10px 12px;background:#fafafa;border-bottom:1px solid #eee;">
-                                        {{-- Détail complet du suivi --}}
+                                <tr class="row-details" data-row="details">
+                                    <td colspan="3" class="hist-details-cell">
                                         @if($suivi->CodeSalAuteur)
                                             <div><strong>Auteur :</strong> {{ $suivi->CodeSalAuteur }}</div>
                                         @endif
@@ -192,14 +172,13 @@
                                         @endif
 
                                         {{-- Affichage complet du commentaire sans filtrage --}}
-                                        <div style="margin-top:8px;white-space:pre-wrap;">{{ $raw }}</div>
+                                        <div class="prewrap mt8">{{ (string)($suivi->Texte ?? '') }}</div>
 
                                         @if(!empty($traitementList) || !empty($affectationList))
-                                            <hr style="border:none;border-top:1px solid #e5e7eb; margin:10px 0">
-                                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                                            <hr class="sep">
+                                            <div class="grid-2">
                                                 <div>
-                                                    <div style="font-weight:600;margin-bottom:6px;">Tâches effectuées
-                                                    </div>
+                                                    <div class="section-title">Tâches effectuées</div>
                                                     @if(!empty($traitementList))
                                                         <div class="chips-wrap">
                                                             @foreach($traitementList as $lbl)
@@ -211,7 +190,7 @@
                                                     @endif
                                                 </div>
                                                 <div>
-                                                    <div style="font-weight:600;margin-bottom:6px;">Affectation</div>
+                                                    <div class="section-title">Affectation</div>
                                                     @if(!empty($affectationList))
                                                         <div class="chips-wrap">
                                                             @foreach($affectationList as $lbl)
@@ -228,14 +207,13 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="3" class="note" style="padding:8px 10px;">Aucun suivi</td>
+                                    <td colspan="3" class="note cell-p8-10">Aucun suivi</td>
                                 </tr>
                             @endforelse
                             </tbody>
                         </table>
                     </div>
                 </template>
-
 
                 <div class="box mserv">
                     <div class="head"><label for="commentaire"><strong>Commentaire</strong></label><span class="note">infos utiles</span>
@@ -246,10 +224,7 @@
                         </div>
                     </div>
                 </div>
-
-
             </section>
-
 
             {{-- DROITE : Affectation + Agenda du technicien --}}
             <section class="col right">
@@ -261,7 +236,6 @@
                     <div class="body">
 
                         <div class="affectationSticky">
-                            {{-- Choix du type --}}
                             {{-- Affecter à (liste unique) --}}
                             <div class="grid2">
                                 <label for="selAny">Affecter à</label>
@@ -297,7 +271,6 @@
                                 <label for="tmPrev">Heure</label>
                                 <input type="time" id="tmPrev" name="heure_rdv" required>
                             </div>
-
 
                             {{-- Étapes AFFECTATION en 2 colonnes --}}
                             <div class="table mt8">
@@ -356,9 +329,6 @@
                                     Valider le prochain rendez-vous
                                 </button>
                             </div>
-
-
-                            <!-- /affectationSticky -->
                         </div>
 
                         {{-- Agenda du technicien --}}
@@ -419,14 +389,13 @@
                                                     <th class="w-80">Tech</th>
                                                     <th class="w-200">Contact</th>
                                                     <th>Label</th>
-                                                    <th class="col-icon"></th> {{-- icône info --}}
+                                                    <th class="col-icon"></th>
                                                 </tr>
                                                 </thead>
                                                 <tbody id="calListRows"></tbody>
                                             </table>
                                         </div>
                                     </div>
-
                                 </div>
                                 <!-- /calWrap -->
                             </div>
@@ -458,7 +427,6 @@
         window.APP_SESSION_ID = "{{ session('id') }}";
     </script>
 
-    @php($v = filemtime(public_path('js/intervention_edit.js')))
-    <script src="{{ asset('js/intervention_edit.js') }}?v={{ $v }}" defer></script>
-
+    @php($v = filemtime(public_path('js/interventions_edit/main.js')))
+    <script type="module" src="{{ asset('js/interventions_edit/main.js') }}"></script>
 @endsection
