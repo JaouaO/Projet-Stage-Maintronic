@@ -259,6 +259,10 @@ input,select,textarea{
 .chip-green{ background:#e9f8ef; border-color:#0d6b2d; color:#0d6b2d; }
 .chip-amber{ background:#fff5dc; border-color:#e6b34e; color:#7a5400; }
 
+.badge-call{
+    background:#e9f2ff; border-color:#7aa7ff; color:#214c9c;
+}
+
 
 
 /* ===== Responsive ===== */

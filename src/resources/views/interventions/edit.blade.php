@@ -91,8 +91,9 @@
                             <thead>
                             <tr>
                                 <th style="width:150px;text-align:left;border-bottom:1px solid #ddd;">Date</th>
-                                <th style="text-align:left;border-bottom:1px solid #ddd;">
-                                    Résumé
+                                <th style="text-align:left;border-bottom:1px solid #ddd;">Résumé</th>
+                                <th style="width:200px;text-align:left;border-bottom:1px solid #ddd;">Rendez-vous /
+                                    Appel
                                 </th>
                                 <th style="width:40px;border-bottom:1px solid #ddd;"></th>
                             </tr>
@@ -116,15 +117,70 @@
 
                                     $objet = trim((string)($suivi->Titre ?? ''));
                                     $auteur = trim((string)($suivi->CodeSalAuteur ?? ''));
-                                @endphp
+                                    // meta lisibles
+                                    $evtType = $suivi->evt_type ?? null;
+                                    $meta = [];
+                                    if (!empty($suivi->evt_meta)) {
+                                        try { $meta = (is_array($suivi->evt_meta) ? $suivi->evt_meta : json_decode($suivi->evt_meta, true)) ?: []; }
+                                        catch (\Throwable $e) { $meta = []; }
+                                    }
+
+                                    $dateIso = $meta['date'] ?? null;                 // "YYYY-MM-DD"
+                                    $dateTxt = null;
+                                    if ($dateIso && preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateIso)) {
+                                        $parts = explode('-', $dateIso);
+                                        $dateTxt = $parts[2].'/'.$parts[1].'/'.$parts[0]; // JJ/MM/AAAA
+                                    }
+
+                                    $heure = $meta['heure'] ?? null;
+                                    $tech  = $meta['tech']  ?? null;
+
+                                    $evtLabel = null; $evtClass = null;
+                                    switch ($evtType) {
+                                        case 'CALL_PLANNED':       $evtLabel = 'Appel planifié';                 $evtClass='badge-call';  break;
+                                        case 'RDV_TEMP_INSERTED':  $evtLabel = 'RDV temporaire (créé)';          $evtClass='badge-temp';  break;
+                                        case 'RDV_TEMP_UPDATED':   $evtLabel = 'RDV temporaire (mis à jour)';    $evtClass='badge-temp';  break;
+                                        case 'RDV_FIXED':          $evtLabel = 'RDV validé';                     $evtClass='badge-valid'; break;
+                                    }
+
+                                    if ($evtLabel) {
+                                        $parts = [];
+                                        if ($dateTxt && $heure) {
+                                            $parts[] = $dateTxt.' à '.$heure;
+                                        } elseif ($dateTxt) {
+                                            $parts[] = $dateTxt;
+                                        } elseif ($heure) {
+                                            $parts[] = $heure;
+                                        }
+                                        if ($tech) $parts[] = $tech;
+                                        if (!empty($parts)) $evtLabel .= ' — ' . implode(' · ', $parts);
+                                    }
+
+                                    // Texte brut d'origine (inchangé)
+                                    $raw = (string)($suivi->Texte ?? '');
+                                                                @endphp
+
 
                                 <tr class="row-main" data-row="main" style="border-bottom:1px solid #f0f0f0;">
                                     <td style="padding:6px 8px;">{{ $dateTxt }}</td>
                                     <td style="padding:6px 8px;">
-                                        @if($auteur !== '') <strong>{{ $auteur }}</strong> — @endif
-                                        @if($objet  !== '') <em>{{ $objet }}</em> — @endif
+                                        @if($auteur !== '')
+                                            <strong>{{ $auteur }}</strong> —
+                                        @endif
+                                        @if($objet  !== '')
+                                            <em>{{ $objet }}</em> —
+                                        @endif
                                         {{ $resumeClean !== '' ? $resumeClean : '—' }}
                                     </td>
+
+                                    <td style="padding:6px 8px;">
+                                        @if($evtLabel)
+                                            <span class="badge {{ $evtClass }}">{{ $evtLabel }}</span>
+                                        @else
+                                            <span class="note">—</span>
+                                        @endif
+                                    </td>
+
 
                                     <td style="padding:6px 8px;text-align:center;">
                                         <button class="hist-toggle" type="button" aria-expanded="false"
@@ -151,7 +207,8 @@
                                             <hr style="border:none;border-top:1px solid #e5e7eb; margin:10px 0">
                                             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
                                                 <div>
-                                                    <div style="font-weight:600;margin-bottom:6px;">Tâches effectuées</div>
+                                                    <div style="font-weight:600;margin-bottom:6px;">Tâches effectuées
+                                                    </div>
                                                     @if(!empty($traitementList))
                                                         <div class="chips-wrap">
                                                             @foreach($traitementList as $lbl)

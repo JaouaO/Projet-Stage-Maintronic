@@ -288,14 +288,44 @@ class MainController extends Controller
         }
 
         //Ajout à t_suiviclient_histo
-        $messageTraitement  = $this->traductionBit($vocabulaire, 'TRAITEMENT',  $bitsTraitement);
+
+        $evtType = null;
+        $evtMeta = null;
+
+// 1) Bouton "Planifier un appel"
+        if ($actionType === 'call') {
+            $evtType = 'CALL_PLANNED';
+            $evtMeta = [
+                'date'  => $dateRdv ?: null,
+                'heure' => $heureRdv ?: null,
+                'tech'  => $reaSal ?: null,
+                'cp'    => $codePostal ?: null,
+                'ville' => $ville ?: null,
+                'label' => mb_substr(trim((string)$commentaire), 0, 60) ?: null,
+            ];
+        }
+
+// 2) Soumission classique qui crée un RDV validé (sans passer par /rdv/valider)
+        if (!$evtType && $shouldInsertPlanning) {
+            $evtType = 'RDV_FIXED';
+            $evtMeta = [
+                'date'  => $dateRdv,
+                'heure' => $heureRdv,
+                'tech'  => $reaSal,
+                'cp'    => $codePostal ?: null,
+                'ville' => $ville ?: null,
+                'label' => $labelComment ?: null,
+            ];
+        }
 
         DB::table('t_suiviclient_histo')->insert([
             'NumInt'        => $numInt,
             'CreatedAt'     => now('Europe/Paris'),
-            'CodeSalAuteur' =>$codeSal,
+            'CodeSalAuteur' => $codeSal,
             'Titre'         => $objet_trait,
             'Texte'         => $commentaire,
+            'evt_type'      => $evtType,
+            'evt_meta'      => $evtMeta ? json_encode($evtMeta, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES) : null,
         ]);
 
 
@@ -384,6 +414,24 @@ class MainController extends Controller
                     'CodeTech'      => $tech,
                 ]
             );
+            $evtMeta = [
+                'date'  => $start->toDateString(),
+                'heure' => $start->format('H:i'),
+                'tech'  => $tech,
+                'cp'    => $request->input('code_postal') ?: null,
+                'ville' => $request->input('ville') ?: null,
+                'label' => $labelComment ?: null,
+            ];
+
+            DB::table('t_suiviclient_histo')->insert([
+                'NumInt'        => $numInt,
+                'CreatedAt'     => now('Europe/Paris'),
+                'CodeSalAuteur' => session('codeSal') ?: null, // ou $request->input('code_sal_auteur')
+                'Titre'         => 'Planification',
+                'Texte'         => (string)($commentaire ?: ''),
+                'evt_type'      => $mode === 'updated' ? 'RDV_TEMP_UPDATED' : 'RDV_TEMP_INSERTED',
+                'evt_meta'      => json_encode($evtMeta, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),
+            ]);
 
             return response()->json(['ok'=>true, 'mode'=>$mode]);
         } catch (\Illuminate\Database\QueryException $qe) {
@@ -487,6 +535,24 @@ class MainController extends Controller
                     'HeureValid'    => now('Europe/Paris')->format('H:i:s'),
                 ]
             );
+            $evtMeta = [
+                'date'  => $dateString,
+                'heure' => substr($timeString,0,5),
+                'tech'  => $tech,
+                'cp'    => $cp,
+                'ville' => $ville,
+                'label' => $labelComment ?: null,
+            ];
+
+            DB::table('t_suiviclient_histo')->insert([
+                'NumInt'        => $numInt,
+                'CreatedAt'     => now('Europe/Paris'),
+                'CodeSalAuteur' => session('codeSal') ?: null,
+                'Titre'         => 'Validation RDV',
+                'Texte'         => (string)($commentaire ?: ''),
+                'evt_type'      => 'RDV_FIXED',
+                'evt_meta'      => json_encode($evtMeta, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),
+            ]);
 
             return response()->json(['ok'=>true, 'updated'=>true]);
 

@@ -113,6 +113,8 @@ class TraitementDossierService
                 'CodeSalAuteur',
                 'Titre',
                 'Texte',
+                'evt_type',  // NEW
+                'evt_meta',  // NEW
             ])
             ->orderByDesc('CreatedAt')
             ->orderByDesc('id')
