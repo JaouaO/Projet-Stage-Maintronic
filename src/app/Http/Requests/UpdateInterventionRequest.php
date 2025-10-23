@@ -18,8 +18,8 @@ class UpdateInterventionRequest extends FormRequest
             'contact_reel'  => ['nullable','string','max:250'],
 
             'rea_sal'       => ['required','string','max:5','exists:t_salarie,CodeSal'],
-            'date_rdv'  => ['date_format:Y-m-d','required_with:heure_rdv','after_or_equal:today'],
-            'heure_rdv' => ['date_format:H:i','required_with:date_rdv'],
+            'date_rdv'  => ['date_format:Y-m-d','required','after_or_equal:today'],
+            'heure_rdv' => ['date_format:H:i','required'],
 
             'code_sal_auteur' => ['required','string','max:5'],
 
@@ -55,11 +55,11 @@ class UpdateInterventionRequest extends FormRequest
             'rea_sal.exists'   => 'Le technicien sélectionné est introuvable.',
 
             'date_rdv.date_format'    => 'La date doit être au format AAAA-MM-JJ.',
-            'date_rdv.required_with'  => 'La date est requise si l’heure est fournie.',
+            'date_rdv.required'  => 'La date est requise.',
             'date_rdv.after_or_equal' => 'La date doit être aujourd’hui ou plus tard.',
 
             'heure_rdv.date_format'   => 'L’heure doit être au format HH:MM.',
-            'heure_rdv.required_with' => 'L’heure est requise si la date est fournie.',
+            'heure_rdv.required' => 'L’heure est requise.',
 
             'code_sal_auteur.required' => 'Votre identifiant est requis.',
             'code_sal_auteur.string'   => 'Votre identifiant doit être une chaîne.',

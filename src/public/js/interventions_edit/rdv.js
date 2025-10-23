@@ -10,7 +10,11 @@ export function initRDV() {
     const numInt     = document.getElementById('openHistory')?.dataset.numInt || '';
     const csrf       = document.querySelector('meta[name="csrf-token"]')?.content || '';
 
-    // --- helpers modale locale (tu peux à la place importer open/close depuis modal.js si tu les exportes)
+    const elTech = document.getElementById('selAny');
+    const elDate = document.getElementById('dtPrev');
+    const elTime = document.getElementById('tmPrev');
+
+    // --- helpers modale locale (vous pouvez remplacer par import modal.js si dispo)
     const modal     = document.getElementById('infoModal');
     const modalBody = document.getElementById('infoModalBody');
     const modalX    = document.getElementById('infoModalClose');
@@ -30,6 +34,60 @@ export function initRDV() {
     modalX?.addEventListener('click', closeModal);
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 
+    // --------------------------------------------------------------------
+    // BLOQUER LE PASSÉ À LA MINUTE PRÈS (simple, sans arrondir/modifier)
+    // --------------------------------------------------------------------
+    const serverIso = (window.APP && window.APP.serverNow) ? String(window.APP.serverNow) : null;
+
+    function nowFromServer(){
+        const d = serverIso ? new Date(serverIso) : new Date();
+        return isNaN(d) ? new Date() : d;
+    }
+    function fmtYMD(d){
+        const y = d.getFullYear();
+        const m = String(d.getMonth()+1).padStart(2,'0');
+        const dd = String(d.getDate()).padStart(2,'0');
+        return `${y}-${m}-${dd}`;
+    }
+    function fmtHM(d){
+        const h = String(d.getHours()).padStart(2,'0');
+        const m = String(d.getMinutes()).padStart(2,'0');
+        return `${h}:${m}`;
+    }
+    function isPastSelection(dateStr, timeStr){
+        if(!dateStr || !timeStr) return false;
+        const [y,m,d] = dateStr.split('-').map(Number);
+        const [hh,mm] = timeStr.split(':').map(Number);
+        const sel = new Date(y, (m-1), d, hh, mm, 0, 0);
+        return sel.getTime() < nowFromServer().getTime();
+    }
+    function applyMinConstraints(){
+        if(!elDate) return;
+        const now = nowFromServer();
+        const today = fmtYMD(now);
+        elDate.min = today; // interdit les jours avant aujourd'hui
+        if(elTime){
+            if(elDate.value === today){
+                elTime.min = fmtHM(now); // interdit les heures < maintenant (à la minute)
+            }else{
+                elTime.removeAttribute('min'); // dates futures: pas de min sur l'heure
+            }
+        }
+    }
+    function guardPastOrAlert(){
+        const date = elDate?.value || '';
+        const time = elTime?.value || '';
+        if(isPastSelection(date, time)){
+            alert('La date/heure choisie est dans le passé. Sélectionnez un créneau futur.');
+            return true;
+        }
+        return false;
+    }
+
+    applyMinConstraints();
+    elDate?.addEventListener('change', applyMinConstraints);
+    elTime?.addEventListener('change', applyMinConstraints);
+
     // --- Nouvel appel (ne crée pas de RDV)
     if (btnCall && form && actionType) {
         btnCall.addEventListener('click', (ev) => {
@@ -45,10 +103,11 @@ export function initRDV() {
         btnRdv.addEventListener('click', async (ev) => {
             withBtnLock(ev.currentTarget, async () => {
                 document.getElementById('actionType').value = '';
-                const tech = document.getElementById('selAny')?.value || '';
-                const date = document.getElementById('dtPrev')?.value || '';
-                const time = document.getElementById('tmPrev')?.value || '';
+                const tech = elTech?.value || '';
+                const date = elDate?.value || '';
+                const time = elTime?.value || '';
                 if (!numInt || !tech || !date || !time) { alert('Sélectionne le technicien, la date et l’heure.'); return; }
+                if (guardPastOrAlert()) return; // empêche passé
 
                 const url = `/interventions/${encodeURIComponent(numInt)}/rdv/temporaire`;
                 const res = await fetch(url, {
@@ -94,11 +153,17 @@ export function initRDV() {
             withBtnLock(ev.currentTarget, async () => {
                 document.getElementById('actionType').value = 'validate_rdv';
 
-                const tech  = document.getElementById('selAny')?.value || '';
-                const date  = document.getElementById('dtPrev')?.value || '';
-                const heure = document.getElementById('tmPrev')?.value || '';
+                const tech  = elTech?.value || '';
+                const date  = elDate?.value || '';
+                const heure = elTime?.value || '';
 
-                // manques → submit classique
+                // refuse validation si passé
+                if (date && heure && isPastSelection(date, heure)) {
+                    alert('Impossible de valider un rendez-vous dans le passé.');
+                    return;
+                }
+
+                // manques → submit classique (laissez la validation serveur faire le reste)
                 if (!numInt || !tech || !date || !heure) { form.requestSubmit(); return; }
 
                 const urlCheck = `/interventions/${encodeURIComponent(numInt)}/rdv/temporaire/check`;
@@ -114,7 +179,6 @@ export function initRDV() {
                     const hasTemps = !!(j1 && j1.ok && (j1.count || 0) > 0);
                     if (!hasTemps) { form.requestSubmit(); return; }
 
-                    // HTML sans styles inline → classes CSS
                     const listHtml = (j1.items || []).map(it => {
                         const hhmm = (it.StartTime || '').slice(0,5);
                         const dfr  = (it.StartDate || '').split('-').reverse().join('/');
@@ -124,22 +188,19 @@ export function initRDV() {
                     }).join('');
 
                     const html = `
-            <div>
-              <h3 class="modal-title">RDV temporaires existants</h3>
-              <p>Des rendez-vous <em>temporaires</em> sont présents sur ce dossier&nbsp;:</p>
-              <ul class="modal-list">
-                ${listHtml}
-              </ul>
-              <p>Que souhaites-tu faire&nbsp;?</p>
-              <div class="hstack-8 flex-wrap">
-                <button id="optPurgeThenValidate" class="btn" type="button" title="Supprimer tous les temporaires puis valider">Supprimer les temporaires puis valider</button>
-                <button id="optValidateAnyway" class="btn" type="button" title="Conserver les temporaires et valider quand même">Valider sans supprimer</button>
-                <button id="optCancel" class="btn" type="button" title="Annuler">Annuler</button>
-              </div>
-            </div>`;
+                      <div>
+                        <h3 class="modal-title">RDV temporaires existants</h3>
+                        <p>Des rendez-vous <em>temporaires</em> sont présents sur ce dossier&nbsp;:</p>
+                        <ul class="modal-list">${listHtml}</ul>
+                        <p>Que souhaitez-vous faire&nbsp;?</p>
+                        <div class="hstack-8 flex-wrap">
+                          <button id="optPurgeThenValidate" class="btn" type="button">Supprimer les temporaires puis valider</button>
+                          <button id="optValidateAnyway" class="btn" type="button">Valider sans supprimer</button>
+                          <button id="optCancel" class="btn" type="button">Annuler</button>
+                        </div>
+                      </div>`;
                     openModal(html);
 
-                    // Purger puis valider
                     modalBody.querySelector('#optPurgeThenValidate')?.addEventListener('click', (e) => {
                         withBtnLock(e.currentTarget, async () => {
                             try {
@@ -160,12 +221,10 @@ export function initRDV() {
                         });
                     }, { once:true });
 
-                    // Valider sans supprimer
                     modalBody.querySelector('#optValidateAnyway')?.addEventListener('click', (e) => {
                         withBtnLock(e.currentTarget, () => { closeModal(); form.requestSubmit(); });
                     }, { once:true });
 
-                    // Annuler
                     modalBody.querySelector('#optCancel')?.addEventListener('click', (e) => {
                         withBtnLock(e.currentTarget, () => closeModal());
                     }, { once:true });

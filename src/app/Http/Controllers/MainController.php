@@ -330,6 +330,8 @@ class MainController extends Controller
             $start = Carbon::parse("$date $heure", 'Europe/Paris');
             $end   = (clone $start)->addHour();
 
+
+
             $exists = DB::table('t_planning_technicien')->where([
                 ['NumIntRef', '=', $numInt],
                 ['StartDate', '=', $start->toDateString()],
