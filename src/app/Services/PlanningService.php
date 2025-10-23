@@ -37,6 +37,7 @@ class PlanningService
                 'p.Commentaire',        // NEW
                 'p.CPLivCli',           // NEW
                 'p.VilleLivCli',        // NEW
+                'p.IsUrgent',           // <-- AJOUT
                 'i.Marque',             // NEW
                 'e.contact_reel as Contact'
             )
@@ -58,23 +59,24 @@ class PlanningService
 
         // 3) Mapping
         $events = [];
-        foreach ($rows as $r) {
-            $startIso = $r->StartDate . 'T' . ($r->StartTime ?: '00:00:00');
-            $endIso   = !empty($r->EndDate) ? ($r->EndDate . 'T' . ($r->EndTime ?: '00:00:00')) : null;
+        foreach ($rows as $row) {
+            $startIso = $row->StartDate . 'T' . ($row->StartTime ?: '00:00:00');
+            $endIso   = !empty($row->EndDate) ? ($row->EndDate . 'T' . ($row->EndTime ?: '00:00:00')) : null;
 
             $events[] = [
-                'id' => $r->rid,
-                'code_tech'      => $r->CodeTech,
+                'id' => $row->rid,
+                'code_tech'      => $row->CodeTech,
                 'start_datetime' => $startIso,
                 'end_datetime'   => $endIso,
-                'label'          => $r->Label,
-                'num_int'        => $r->NumIntRef,
-                'contact'        => $r->Contact ?: null,
-                'is_validated'   =>  isset($r->IsValidated) ? ((int)$r->IsValidated === 1) : null,
-                'commentaire'    => $r->Commentaire ?: null,      // NEW
-                'cp'             => $r->CPLivCli ?: null,         // NEW
-                'ville'          => $r->VilleLivCli ?: null,      // NEW
-                'marque'         => $r->Marque ?: null,           // NEW
+                'label'          => $row->Label,
+                'num_int'        => $row->NumIntRef,
+                'contact'        => $row->Contact ?: null,
+                'is_validated'   =>  isset($row->IsValidated) ? ((int)$row->IsValidated === 1) : null,
+                'commentaire'    => $row->Commentaire ?: null,      // NEW
+                'cp'             => $row->CPLivCli ?: null,         // NEW
+                'ville'          => $row->VilleLivCli ?: null,      // NEW
+                'marque'         => $row->Marque ?: null,
+                'is_urgent' => (int)$row->IsUrgent === 1,// NEW
             ];
         }
 

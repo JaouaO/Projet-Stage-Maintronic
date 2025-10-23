@@ -19,6 +19,22 @@
         <input type="hidden" name="ville" value="{{$interv->VilleLivCli ?? ''}}">
         <input type="hidden" name="action_type" id="actionType" value="">
 
+
+        @if ($errors->any())
+            <div id="formErrors" class="alert alert--error box">
+                <div class="body">
+                    <strong class="alert-title">Le formulaire contient des erreurs :</strong>
+                    <ul class="alert-list">
+                        @foreach ($errors->all() as $error)
+                            <li>{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            </div>
+        @endif
+
+
+
         <div class="app">
             {{-- Gauche : Traitement du dossier --}}
             <section class="col center">
@@ -39,7 +55,10 @@
                             <label for="contactReel">Contact réel</label>
                             <input type="text" id="contactReel" name="contact_reel"
                                    maxlength="255"
-                                   value="{{ old('contact_reel', $contactReel) }}">
+                                   value="{{ old('contact_reel', $contactReel) }}"
+                                   class="{{ $errors->has('contact_reel') ? 'is-invalid' : '' }}"
+                                   aria-invalid="{{ $errors->has('contact_reel') ? 'true' : 'false' }}"
+                            >
                         </div>
 
                         {{-- Bouton historique (plein largeur, un peu plus visible) --}}
@@ -51,8 +70,7 @@
                         </button>
 
                         {{-- Checklist TRAITEMENT --}}
-                        <div class="table mt6">
-                            <table>
+                        <div class="table mt6 {{ $errors->has('traitement') || $errors->has('traitement.*') ? 'is-invalid-block' : '' }}">                            <table>
                                 <tbody>
                                 @php $traits = $traitementItems ?? []; @endphp
                                 @forelse($traits as $trait)
@@ -109,27 +127,38 @@
                                         catch (\Throwable $e) { $meta = []; }
                                     }
 
-                                    $dateIso = $meta['date'] ?? null; // YYYY-MM-DD
-                                    if ($dateIso && preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateIso)) {
-                                        $parts = explode('-', $dateIso);
-                                        $dateTxt = $parts[2].'/'.$parts[1].'/'.$parts[0];
-                                    }
-                                    $heure = $meta['heure'] ?? null;
-                                    $tech  = $meta['tech']  ?? null;
+                                    $dateIso = $meta['date'] ?? $meta['d'] ?? null; // legacy/compact
+                                    $heure   = $meta['heure'] ?? $meta['h'] ?? null;
+                                    $tech    = $meta['tech']  ?? $meta['t'] ?? null;
+                                    $urgent  = (int) (
+                                        (isset($meta['urg']) && $meta['urg'])      // compact
+                                        || (isset($meta['urgent']) && $meta['urgent']) // legacy éventuel
+                                    );
 
+                                    // (facultatif) listes par ligne si déjà présentes dans evt_meta compacte
+                                    $traitementList  = $meta['tl'] ?? [];
+                                    $affectationList = $meta['al'] ?? [];
+
+                                    // Date d'affichage
+                                    $dateTxt = '—';
+                                    if ($dateIso && preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateIso)) {
+                                        [$yy,$mm,$dd] = explode('-', $dateIso);
+                                        $dateTxt = "$dd/$mm/$yy";
+                                    }
+
+                                    // Label d'événement existant...
                                     $evtLabel = null; $evtClass = null;
                                     switch ($evtType) {
-                                        case 'CALL_PLANNED':       $evtLabel = 'Appel planifié';                 $evtClass='badge-call';  break;
-                                        case 'RDV_TEMP_INSERTED':  $evtLabel = 'RDV temporaire (créé)';          $evtClass='badge-temp';  break;
-                                        case 'RDV_TEMP_UPDATED':   $evtLabel = 'RDV temporaire (mis à jour)';    $evtClass='badge-temp';  break;
-                                        case 'RDV_FIXED':          $evtLabel = 'RDV validé';                     $evtClass='badge-valid'; break;
+                                        case 'CALL_PLANNED':      $evtLabel='Appel planifié';              $evtClass='badge-call';  break;
+                                        case 'RDV_TEMP_INSERTED': $evtLabel='RDV temporaire (créé)';       $evtClass='badge-temp';  break;
+                                        case 'RDV_TEMP_UPDATED':  $evtLabel='RDV temporaire (mis à jour)'; $evtClass='badge-temp';  break;
+                                        case 'RDV_FIXED':         $evtLabel='RDV validé';                  $evtClass='badge-valid'; break;
                                     }
-
                                     if ($evtLabel) {
                                         $parts = [];
-                                        if ($dateTxt && $heure)      { $parts[] = $dateTxt.' à '.$heure; }
-                                        elseif ($dateTxt)            { $parts[] = $dateTxt; }
-                                        elseif ($heure)              { $parts[] = $heure; }
+                                        if ($dateTxt && $heure)      $parts[] = $dateTxt.' à '.$heure;
+                                        elseif ($dateTxt)             $parts[] = $dateTxt;
+                                        elseif ($heure)               $parts[] = $heure;
                                         if ($tech) $parts[] = $tech;
                                         if (!empty($parts)) $evtLabel .= ' — ' . implode(' · ', $parts);
                                     }
@@ -144,12 +173,15 @@
                                         @if($objet  !== '')
                                             <em>{{ $objet }}</em> —
                                         @endif
-                                            {{ $resumeShort }}
+                                        {{ $resumeShort }}
                                     </td>
 
                                     <td class="cell-p6">
                                         @if($evtLabel)
                                             <span class="badge {{ $evtClass }}">{{ $evtLabel }}</span>
+                                            @if($urgent)
+                                                <span class="badge badge-urgent" aria-label="Dossier urgent">URGENT</span>
+                                            @endif
                                         @else
                                             <span class="note">—</span>
                                         @endif
@@ -220,7 +252,15 @@
                     </div>
                     <div class="body">
                         <div>
-                            <input type="text" id="commentaire" name="commentaire" maxlength="249">
+                            <input
+                                type="text"
+                                id="commentaire"
+                                name="commentaire"
+                                maxlength="249"
+                                value="{{ old('commentaire') }}"
+                                class="{{ $errors->has('commentaire') ? 'is-invalid' : '' }}"
+                                aria-invalid="{{ $errors->has('commentaire') ? 'true' : 'false' }}"
+                            >
                         </div>
                     </div>
                 </div>
@@ -239,42 +279,73 @@
                             {{-- Affecter à (liste unique) --}}
                             <div class="grid2">
                                 <label for="selAny">Affecter à</label>
-                                <select name="rea_sal" id="selAny" required>
-                                    <option value="">— Sélectionner —</option>
+                                <div class="hstack-12">
+                                    <select
+                                        name="rea_sal"
+                                        id="selAny"
+                                        required
+                                        class="{{ $errors->has('rea_sal') ? 'is-invalid' : '' }}"
+                                        aria-invalid="{{ $errors->has('rea_sal') ? 'true' : 'false' }}"
+                                    >
+                                        <option value="">— Sélectionner —</option>
+                                        @if(($techniciens ?? collect())->count())
+                                            <optgroup label="Techniciens">
+                                                @foreach($techniciens as $t)
+                                                    <option value="{{ $t->CodeSal }}"
+                                                        {{ old('rea_sal') == $t->CodeSal ? 'selected' : '' }}>
+                                                        {{ $t->NomSal }} ({{ $t->CodeSal }})
+                                                    </option>
+                                                @endforeach
+                                            </optgroup>
+                                        @endif
+                                        @if(($salaries ?? collect())->count())
+                                            <optgroup label="Salariés">
+                                                @foreach($salaries as $s)
+                                                    <option value="{{ $s->CodeSal }}"
+                                                        {{ old('rea_sal') == $s->CodeSal ? 'selected' : '' }}>
+                                                        {{ $s->NomSal }} ({{ $s->CodeSal }})
+                                                    </option>
+                                                @endforeach
+                                            </optgroup>
+                                        @endif
+                                    </select>
 
-                                    @if(($techniciens ?? collect())->count())
-                                        <optgroup label="Techniciens">
-                                            @foreach($techniciens as $t)
-                                                <option value="{{ $t->CodeSal }}">
-                                                    {{ $t->NomSal }} ({{ $t->CodeSal }})
-                                                </option>
-                                            @endforeach
-                                        </optgroup>
-                                    @endif
-
-                                    @if(($salaries ?? collect())->count())
-                                        <optgroup label="Salariés">
-                                            @foreach($salaries as $s)
-                                                <option value="{{ $s->CodeSal }}">
-                                                    {{ $s->NomSal }} ({{ $s->CodeSal }})
-                                                </option>
-                                            @endforeach
-                                        </optgroup>
-                                    @endif
-                                </select>
+                                    {{-- URGENT (hidden 0 + checkbox 1) --}}
+                                    <label class="urgent-toggle" for="urgent">
+                                        <input type="hidden" name="urgent" value="0">
+                                        <input type="checkbox" id="urgent" name="urgent" value="1"
+                                            {{ old('urgent') == '1' ? 'checked' : '' }}>
+                                        <span>Urgent</span>
+                                    </label>
+                                </div>
                             </div>
+
 
                             <div class="gridRow gridRow--dt">
                                 <label for="dtPrev">Date</label>
-                                <input type="date" id="dtPrev" name="date_rdv" required>
-
+                                <input
+                                    type="date"
+                                    id="dtPrev"
+                                    name="date_rdv"
+                                    required
+                                    value="{{ old('date_rdv') }}"
+                                    class="{{ $errors->has('date_rdv') ? 'is-invalid' : '' }}"
+                                    aria-invalid="{{ $errors->has('date_rdv') ? 'true' : 'false' }}"
+                                >
                                 <label for="tmPrev">Heure</label>
-                                <input type="time" id="tmPrev" name="heure_rdv" required>
+                                <input
+                                    type="time"
+                                    id="tmPrev"
+                                    name="heure_rdv"
+                                    required
+                                    value="{{ old('heure_rdv') }}"
+                                    class="{{ $errors->has('heure_rdv') ? 'is-invalid' : '' }}"
+                                    aria-invalid="{{ $errors->has('heure_rdv') ? 'true' : 'false' }}"
+                                >
                             </div>
 
                             {{-- Étapes AFFECTATION en 2 colonnes --}}
-                            <div class="table mt8">
-                                <table>
+                            <div class="table mt8 {{ $errors->has('affectation') || $errors->has('affectation.*') ? 'is-invalid-block' : '' }}">                                <table>
                                     <thead>
                                     <tr>
                                         <th>Étapes de planification</th>

@@ -14,8 +14,8 @@ class UpdateInterventionRequest extends FormRequest
     public function rules()
     {
         return [
-            'commentaire'   => ['nullable','string','max:1000'],
-            'contact_reel'  => ['nullable','string','max:255'],
+            'commentaire'   => ['nullable','string','max:250'],
+            'contact_reel'  => ['nullable','string','max:250'],
 
             'rea_sal'       => ['required','string','max:5','exists:t_salarie,CodeSal'],
             'date_rdv'  => ['date_format:Y-m-d','required_with:heure_rdv','after_or_equal:today'],
@@ -34,16 +34,58 @@ class UpdateInterventionRequest extends FormRequest
             'affectation'   => ['array'],
             'affectation.*' => ['in:0,1'],
 
-            'rdv_validated_by_ajax' => ['nullable','in:0,1'],
             'action_type'   => ['nullable','in:,call,validate_rdv'],
+
+            'urgent' => ['sometimes','boolean'],
         ];
     }
 
     public function messages()
     {
         return [
+            'commentaire.string' => 'Le commentaire doit être une chaîne de caractères.',
+            'commentaire.max'    => 'Le commentaire ne peut pas dépasser 250 caractères.',
+
+            'contact_reel.string' => 'Le contact réel doit être une chaîne de caractères.',
+            'contact_reel.max'    => 'Le contact réel ne peut pas dépasser 250 caractères.',
+
+            'rea_sal.required' => 'Veuillez sélectionner un technicien.',
+            'rea_sal.string'   => 'Le code technicien doit être une chaîne.',
+            'rea_sal.max'      => 'Le code technicien ne peut pas dépasser 5 caractères.',
+            'rea_sal.exists'   => 'Le technicien sélectionné est introuvable.',
+
+            'date_rdv.date_format'    => 'La date doit être au format AAAA-MM-JJ.',
             'date_rdv.required_with'  => 'La date est requise si l’heure est fournie.',
+            'date_rdv.after_or_equal' => 'La date doit être aujourd’hui ou plus tard.',
+
+            'heure_rdv.date_format'   => 'L’heure doit être au format HH:MM.',
             'heure_rdv.required_with' => 'L’heure est requise si la date est fournie.',
+
+            'code_sal_auteur.required' => 'Votre identifiant est requis.',
+            'code_sal_auteur.string'   => 'Votre identifiant doit être une chaîne.',
+            'code_sal_auteur.max'      => 'Votre identifiant ne peut pas dépasser 5 caractères.',
+
+            'code_postal.string' => 'Le code postal doit être une chaîne.',
+            'code_postal.max'    => 'Le code postal ne peut pas dépasser 10 caractères.',
+            'code_postal.regex'  => 'Le code postal contient des caractères non autorisés.',
+
+            'ville.string' => 'La ville doit être une chaîne.',
+            'ville.max'    => 'La ville ne peut pas dépasser 80 caractères.',
+
+            'marque.string' => 'La marque doit être une chaîne.',
+            'marque.max'    => 'La marque ne peut pas dépasser 80 caractères.',
+
+            'objet_trait.string' => 'L’objet doit être une chaîne.',
+            'objet_trait.max'    => 'L’objet ne peut pas dépasser 120 caractères.',
+
+            'traitement.array'    => 'Le bloc “Traitement” est invalide.',
+            'traitement.*.in'     => 'Chaque case “Traitement” doit valoir 0 ou 1.',
+
+            'affectation.array'   => 'Le bloc “Affectation” est invalide.',
+            'affectation.*.in'    => 'Chaque case “Affectation” doit valoir 0 ou 1.',
+
+            'action_type.in'      => 'Le type d’action est invalide.',
         ];
     }
 }
+
