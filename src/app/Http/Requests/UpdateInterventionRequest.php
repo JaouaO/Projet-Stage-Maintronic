@@ -34,9 +34,10 @@ class UpdateInterventionRequest extends FormRequest
             'affectation'   => ['array'],
             'affectation.*' => ['in:0,1'],
 
-            'action_type'   => ['nullable','in:,call,validate_rdv'],
+            'action_type'   => ['required','in:,appel,rdv_valide'],
 
             'urgent' => ['sometimes','boolean'],
+            'not_regex:/[\'{}";<>]/', // interdit les ' et ;
         ];
     }
 

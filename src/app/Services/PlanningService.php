@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 
@@ -112,5 +113,16 @@ class PlanningService
         $end   = $start->copy()->addDays($d)->endOfDay();
 
         return ['start' => $start, 'end' => $end];
+    }
+
+    public function listTempsByNumInt(string $numInt): Collection
+    {
+        return DB::table('t_planning_technicien')
+            ->where('NumIntRef', $numInt)
+            ->where(function ($w) {
+                $w->whereNull('IsValidated')->orWhere('IsValidated', 0);
+            })
+            ->orderBy('StartDate')->orderBy('StartTime')
+            ->get(['id','CodeTech','StartDate','StartTime','Label']);
     }
 }

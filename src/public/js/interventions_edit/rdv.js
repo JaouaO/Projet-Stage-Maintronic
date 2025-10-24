@@ -92,7 +92,7 @@ export function initRDV() {
     if (btnCall && form && actionType) {
         btnCall.addEventListener('click', (ev) => {
             withBtnLock(ev.currentTarget, () => {
-                actionType.value = 'call';
+                actionType.value = 'appel';
                 form.requestSubmit();
             });
         });
@@ -102,7 +102,7 @@ export function initRDV() {
     if (btnRdv) {
         btnRdv.addEventListener('click', async (ev) => {
             withBtnLock(ev.currentTarget, async () => {
-                document.getElementById('actionType').value = '';
+                document.getElementById('actionType').value = 'rdv_temporaire';
                 const tech = elTech?.value || '';
                 const date = elDate?.value || '';
                 const time = elTime?.value || '';
@@ -151,7 +151,7 @@ export function initRDV() {
     if (btnVal && form) {
         btnVal.addEventListener('click', (ev) => {
             withBtnLock(ev.currentTarget, async () => {
-                document.getElementById('actionType').value = 'validate_rdv';
+                document.getElementById('actionType').value = 'rdv_valide';
 
                 const tech  = elTech?.value || '';
                 const date  = elDate?.value || '';
