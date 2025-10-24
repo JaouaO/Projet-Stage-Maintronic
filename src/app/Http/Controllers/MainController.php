@@ -27,13 +27,14 @@ class MainController extends Controller
     private UpdateInterventionService $updateInterventionService;
 
     public function __construct(
-        AuthService $authService,
-        InterventionService $interventionService,
-        TraitementDossierService $traitementDossierService,
-        PlanningService $planningService,
-        PlanningWriteService $planningWriteService,
+        AuthService               $authService,
+        InterventionService       $interventionService,
+        TraitementDossierService  $traitementDossierService,
+        PlanningService           $planningService,
+        PlanningWriteService      $planningWriteService,
         UpdateInterventionService $updateInterventionService
-    ) {
+    )
+    {
         $this->authService = $authService;
         $this->interventionService = $interventionService;
         $this->traitementDossierService = $traitementDossierService;
@@ -65,8 +66,8 @@ class MainController extends Controller
         $result = $this->authService->verifHoraires($codeSal);
 
         $request->session()->put([
-            'id'        => $id,
-            'codeSal'   => $login['user']['codeSal'],
+            'id' => $id,
+            'codeSal' => $login['user']['codeSal'],
             'CodeAgSal' => $login['user']['CodeAgSal'],
         ]);
 
@@ -92,7 +93,7 @@ class MainController extends Controller
 
     public function showInterventions(Request $request)
     {
-        $perPage = (int) $request->query('per_page', 10);
+        $perPage = (int)$request->query('per_page', 10);
         if (!in_array($perPage, [10, 25, 50, 100], true)) $perPage = 10;
 
         $rows = $this->interventionService->listPaginatedSimple($perPage);
@@ -100,28 +101,28 @@ class MainController extends Controller
         $todoTagClass = [
             'CONFIRMER_RDV' => 'blue',
             'PLANIFIER_RDV' => 'amber',
-            'CLOTURER'      => 'green',
-            'DIAGNOSTIC'    => 'violet',
+            'CLOTURER' => 'green',
+            'DIAGNOSTIC' => 'violet',
         ];
 
         return view('interventions.show', [
-            'rows'        => $rows,
-            'todoTagClass'=> $todoTagClass,
-            'perPage'     => $perPage,
+            'rows' => $rows,
+            'todoTagClass' => $todoTagClass,
+            'perPage' => $perPage,
         ]);
     }
 
     public function entree(NotBlankRequest $request)
     {
-        $idFromUrl  = $request->query('id');
-        $sessionId  = session('id');
+        $idFromUrl = $request->query('id');
+        $sessionId = session('id');
         if (!$sessionId || $idFromUrl !== $sessionId) {
             return redirect()->route('authentification')->with('message', 'Session invalide.');
         }
 
         $validated = $request->validate([
             'num_int' => ['required', 'regex:/^[A-Za-z0-9_-]+$/', 'exists:t_intervention,NumInt'],
-            'agence'  => ['required', 'regex:/^[A-Za-z0-9_-]+$/'],
+            'agence' => ['required', 'regex:/^[A-Za-z0-9_-]+$/'],
         ]);
 
         return redirect()->route('interv.edit', ['numInt' => $validated['num_int']]);
@@ -148,18 +149,18 @@ class MainController extends Controller
                 $codeTech,
                 $request->query('from'),
                 $request->query('to'),
-                (int) $request->query('days', 5),
+                (int)$request->query('days', 5),
                 'Europe/Paris'
             );
             return response()->json($payload);
         } catch (\Throwable $e) {
             Log::error('apiPlanningTech error', ['ex' => $e->getMessage()]);
             return response()->json([
-                'ok'  => false,
+                'ok' => false,
                 'msg' => 'Erreur SQL lors de la lecture du planning',
                 'sql' => [
-                    'info'  => $e->getMessage(),
-                    'code'  => method_exists($e, 'getCode') ? $e->getCode() : null,
+                    'info' => $e->getMessage(),
+                    'code' => method_exists($e, 'getCode') ? $e->getCode() : null,
                     'state' => method_exists($e, 'getSqlState') ? $e->getSqlState() : null,
                 ],
             ], 500);
@@ -168,7 +169,7 @@ class MainController extends Controller
 
     public function updateIntervention(UpdateInterventionRequest $request, $numInt): \Illuminate\Http\RedirectResponse
     {
-        $dto = UpdateInterventionDTO::fromRequest($request, (string) $numInt);
+        $dto = UpdateInterventionDTO::fromRequest($request, (string)$numInt);
 
         try {
             $this->updateInterventionService->updateAndPlanRdv($dto);
@@ -215,13 +216,25 @@ class MainController extends Controller
     }
 
 
-
     public function rdvTempCheck(Request $request, string $numInt): \Illuminate\Http\JsonResponse
     {
         try {
+            $exclude = $request->input('exclude');
             $rows = $this->planningService->listTempsByNumInt($numInt);
+
+            if (is_array($exclude)
+                && !empty($exclude['codeTech'])
+                && !empty($exclude['startDate'])
+                && !empty($exclude['startTime'])) {
+
+                $rows = $rows->reject(function ($r) use ($exclude) {
+                    return ($r->CodeTech === $exclude['codeTech'])
+                        && ($r->StartDate === $exclude['startDate'])
+                        && ($r->StartTime === $exclude['startTime']);
+                });
+            }
             return response()->json([
-                'ok'    => true,
+                'ok' => true,
                 'count' => $rows->count(),
                 'items' => $rows,
             ]);
@@ -239,4 +252,24 @@ class MainController extends Controller
             return response()->json(['ok' => false, 'msg' => $e->getMessage()], 500);
         }
     }
+
+    public function rdvTempDelete(Request $request, string $numInt, int $id): \Illuminate\Http\JsonResponse
+    {
+        try {
+            $deleted = $this->planningWriteService->deleteTempById($numInt, $id);
+
+            if ($deleted === 0) {
+                return response()->json([
+                    'ok' => false,
+                    'msg' => "Aucun RDV temporaire trouvé (ou déjà validé) pour ce dossier.",
+                ], 404);
+            }
+
+            return response()->json(['ok' => true, 'deleted' => 1]);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'msg' => $e->getMessage()], 500);
+        }
+    }
+
 }
+

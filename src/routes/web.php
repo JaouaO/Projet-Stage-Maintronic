@@ -53,7 +53,10 @@ Route::post('/interventions/{numInt}/rdv/temporaire/check', [MainController::cla
     ->name('rdv.temp.check');
 Route::post('/interventions/{numInt}/rdv/temporaire/purge', [MainController::class, 'rdvTempPurge'])
     ->name('rdv.temp.purge');
-
+Route::delete(
+    '/interventions/{numInt}/rdv/temporaire/{id}',
+    [MainController::class, 'rdvTempDelete']
+)->name('rdv.temp.delete')->middleware('check.session');
 
 
 Route::get('/erreur', function () {

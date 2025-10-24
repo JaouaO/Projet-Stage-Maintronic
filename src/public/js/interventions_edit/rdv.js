@@ -157,7 +157,7 @@ export function initRDV() {
                 const date  = elDate?.value || '';
                 const heure = elTime?.value || '';
 
-                // refuse validation si passé
+                // refuse validation si passe
                 if (date && heure && isPastSelection(date, heure)) {
                     alert('Impossible de valider un rendez-vous dans le passé.');
                     return;
@@ -168,12 +168,20 @@ export function initRDV() {
 
                 const urlCheck = `/interventions/${encodeURIComponent(numInt)}/rdv/temporaire/check`;
                 const urlPurge = `/interventions/${encodeURIComponent(numInt)}/rdv/temporaire/purge`;
+                const timeSeconds = (heure.length === 5 ? `${heure}:00` : heure);
 
                 try {
                     const r1 = await fetch(urlCheck, {
-                        method: 'POST', credentials: 'same-origin',
+                        method: 'POST',
+                        credentials: 'same-origin',
                         headers: { 'Accept':'application/json', 'Content-Type':'application/json', 'X-CSRF-TOKEN': csrf },
-                        body: JSON.stringify({})
+                        body: JSON.stringify({
+                            exclude: {
+                                codeTech: tech || null,
+                                startDate: date || null,
+                                startTime: timeSeconds  || null
+                            }
+                        })
                     });
                     const j1 = await r1.json().catch(() => ({ ok:false, count:0, items:[] }));
                     const hasTemps = !!(j1 && j1.ok && (j1.count || 0) > 0);

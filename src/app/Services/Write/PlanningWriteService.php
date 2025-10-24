@@ -77,4 +77,21 @@ class PlanningWriteService
             ->delete();
 
     }
+
+    /**
+     * Supprime un seul RDV temporaire (non validé) par son id pour un dossier donné.
+     * @return int nombre de lignes supprimées (0 ou 1)
+     */
+    public function deleteTempById(string $numInt, int $id): int
+    {
+        return DB::table('t_planning_technicien')
+            ->where('id', $id)
+            ->where('NumIntRef', $numInt)
+            ->where(function ($w) {
+                $w->whereNull('IsValidated')->orWhere('IsValidated', 0);
+            })
+            ->delete();
+    }
 }
+
+

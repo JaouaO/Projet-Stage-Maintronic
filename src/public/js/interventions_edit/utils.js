@@ -32,3 +32,27 @@ export function escapeHtml(s) {
         .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
 }
+
+
+// --- Heure serveur centralisée ---
+export const SERVER_OFFSET_MS = (() => {
+    const base = new Date((window.APP && window.APP.serverNow) || Date.now());
+    return base.getTime() - Date.now();
+})();
+
+/** "Maintenant" côté serveur (Date) */
+export function nowServer() {
+    return new Date(Date.now() + SERVER_OFFSET_MS);
+}
+
+/** Minuit local d'une Date */
+export function startOfDay(d) {
+    const x = new Date(d);
+    x.setHours(0, 0, 0, 0);
+    return x;
+}
+
+/** true si d est strictement avant "aujourd'hui" (selon l'heure serveur) */
+export function isBeforeToday(d) {
+    return startOfDay(d) < startOfDay(nowServer());
+}
