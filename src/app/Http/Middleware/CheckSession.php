@@ -65,7 +65,10 @@ class CheckSession
         view()->share('agences_autorisees', $data->agences_autorisees ?? []);
 
         // Sauvegarder le CodeSal dans la session
-        session(['codeSal' => $data->Code_Sal]);
+        session([
+            'agences_autorisees' => $data->agences_autorisees ?? [],
+            'codeSal' => $data->Code_Sal
+        ]);
 
 
         return $next($request);

@@ -91,26 +91,34 @@ class MainController extends Controller
         return view('accueil', compact('numints'));
     }
 
+    // MainController@showInterventions
     public function showInterventions(Request $request)
     {
+
+        Log::info('[PING] updateAndPlanRdv atteint');
         $perPage = (int)$request->query('per_page', 10);
         if (!in_array($perPage, [10, 25, 50, 100], true)) $perPage = 10;
 
-        $rows = $this->interventionService->listPaginatedSimple($perPage);
+        $agencesAutorisees = (array) session('agences_autorisees', []);
+        $codeSal           = (string) session('codeSal', '');
+
+        $rows = $this->interventionService->listPaginatedSimple($perPage, $agencesAutorisees, $codeSal);
 
         $todoTagClass = [
+            // On garde vos classes de couleurs si vous voulez réutiliser l’affichage des tags.
             'CONFIRMER_RDV' => 'blue',
             'PLANIFIER_RDV' => 'amber',
-            'CLOTURER' => 'green',
-            'DIAGNOSTIC' => 'violet',
+            'CLOTURER'      => 'green',
+            'DIAGNOSTIC'    => 'violet',
         ];
 
         return view('interventions.show', [
-            'rows' => $rows,
-            'todoTagClass' => $todoTagClass,
-            'perPage' => $perPage,
+            'rows'          => $rows,
+            'todoTagClass'  => $todoTagClass,
+            'perPage'       => $perPage,
         ]);
     }
+
 
     public function entree(NotBlankRequest $request)
     {
@@ -169,6 +177,8 @@ class MainController extends Controller
 
     public function updateIntervention(UpdateInterventionRequest $request, $numInt): \Illuminate\Http\RedirectResponse
     {
+
+        Log::debug('urgent?', ['raw' => $request->input('urgent'), 'bool' => $request->boolean('urgent')]);
         $dto = UpdateInterventionDTO::fromRequest($request, (string)$numInt);
 
         try {

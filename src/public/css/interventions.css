@@ -1,6 +1,8 @@
 :root{
-    --W:1024px; --pad:12px; --gap:10px;
+    --W:1280px; --pad:12px; --gap:10px;
+
     --bg:#f6f7fb; --panel:#ffffff; --ink:#1f2430; --mut:#657089; --line:#d9deea; --head:#e9f2ff;
+
     --tag-blue:#e8f1ff; --tag-blue-ink:#143b7a;
     --tag-amber:#fff2cc; --tag-amber-ink:#6b4d00;
     --tag-coral:#ffe3e6; --tag-coral-ink:#7a1d27;
@@ -13,77 +15,60 @@
 html,body{height:auto}
 body{
     margin:0;background:var(--bg);color:var(--ink);
-    font:13px/1.35 Inter,system-ui,Segoe UI;
-    overflow:auto; /* la page scrolle seulement si besoin */
+    font:13.5px/1.4 Inter,system-ui,Segoe UI;
+    overflow:auto;
 }
 
-/* Layout fluide sans forcer la hauteur */
+/* Layout */
 .app{
-    width:100%;
-    max-width:var(--W);
-    margin:0 auto;
-    padding:var(--pad);
-    display:grid;
-    gap:var(--gap);
-    grid-template-rows:auto auto auto; /* pas de 1fr => pas de “gonflage” */
+    width:100%;max-width:var(--W);margin:0 auto;padding:var(--pad);
+    display:grid;gap:var(--gap);grid-template-rows:auto auto auto;
 }
 .header{display:flex;justify-content:space-between;align-items:center}
 h1{margin:0;font-size:18px}
 
-/* Carte à la taille de son contenu */
+/* Card */
 .card{
     background:var(--panel);border:1px solid var(--line);border-radius:10px;
-    display:flex;flex-direction:column;min-height:0
+    display:flex;flex-direction:column;min-height:0;
 }
 .cardHead{
     display:flex;justify-content:space-between;align-items:center;
-    padding:8px 10px;border-bottom:1px solid var(--line);background:var(--head)
+    padding:8px 10px;border-bottom:1px solid var(--line);background:var(--head);
 }
-.cardBody{
-    padding:8px;
-    display:block;   /* plus de grid/flex ici => hauteur selon contenu */
-}
+.cardBody{ padding:8px; display:block }
 
-/* Zone table SANS scroll interne, taille au contenu */
+/* Table container */
 .tableArea{
-    overflow:visible;
-    border:1px solid var(--line);border-radius:8px;background:#fff;
+    overflow:visible;border:1px solid var(--line);border-radius:8px;background:#fff;
 }
 
 /* Toolbar */
 .toolbar{display:flex;justify-content:flex-end;align-items:center;margin:8px 0}
 .toolbar label{margin-right:8px}
 
-/* Table + alignement */
-.table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:12.5px}
+/* Table */
+.table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:13px}
 .table thead th{
     position:sticky;top:0;z-index:1;background:#f7faff;
     border-bottom:1px solid var(--line);padding:8px;color:#2a3142;
-    cursor:pointer;user-select:none
+    cursor:pointer;user-select:none;
 }
 .table tbody td{
-    border-bottom:1px solid var(--line);padding:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+    border-bottom:1px solid var(--line);padding:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
 .table tbody tr:nth-child(even){background:#fbfcff}
 .table th.sort-asc::after{content:" ▲";font-size:12px}
 .table th.sort-desc::after{content:" ▼";font-size:12px}
 
+/* Alignements */
 th.col-id, td.col-id{text-align:left}
 th.col-client, td.col-client{text-align:left}
 th.col-date, td.col-date{text-align:center; font-variant-numeric:tabular-nums}
 th.col-heure, td.col-heure{text-align:center; font-variant-numeric:tabular-nums}
 th.col-todo, td.col-todo{text-align:left}
+th.col-flags, td.col-flags{text-align:left}
 th.col-actions, td.col-actions{text-align:left}
-
-/* Tags */
-.tag{display:inline-block;padding:4px 8px;border-radius:999px;border:1px solid var(--line);font-weight:600}
-.tag.blue{background:var(--tag-blue);color:var(--tag-blue-ink)}
-.tag.amber{background:var(--tag-amber);color:var(--tag-amber-ink)}
-.tag.coral{background:var(--tag-coral);color:var(--tag-coral-ink)}
-.tag.green{background:var(--tag-green);color:var(--tag-green-ink)}
-.tag.violet{background:var(--tag-violet);color:var(--tag-violet-ink)}
-.tag.teal{background:var(--tag-teal);color:var(--tag-teal-ink)}
-.tag.neutral{background:#f3f4f6;color:#374151}
 
 /* Boutons */
 .btn{border:1px solid var(--line);background:#eef3ff;padding:6px 10px;border-radius:8px;font-size:12.5px;text-decoration:none;color:inherit}
@@ -99,12 +84,52 @@ tr[data-href]:hover{background:#eef3ff}
 .pager ul{list-style:none;margin:0;padding:0;display:flex;gap:6px}
 .pager li a, .pager li span{
     display:inline-block;min-width:34px;padding:6px 10px;text-align:center;
-    border:1px solid #e5e7eb;border-radius:6px;background:#fff;color:#1f2430;text-decoration:none;font-size:13px
+    border:1px solid #e5e7eb;border-radius:6px;background:#fff;color:#1f2430;text-decoration:none;font-size:13px;
 }
 .pager li span[aria-current="page"]{background:#e8f1ff;border-color:#cfe0ff;font-weight:600}
 .pager li a:hover{background:#f7faff}
 .pager li.disabled span{opacity:.5}
 
+/* ------------------ TAGS (A FAIRE) ------------------ */
+.tag{
+    display:inline-block;padding:4px 8px;border-radius:999px;border:1px solid var(--line);
+    font-weight:600;font-size:12px;
+}
+.tag.autre{background:#f3f4f6;color:#374151;border-color:#e5e7eb}
 
+/* Mapping AFFECTATION (t_actions_vocabulaire.code) */
+.tag.t-RDV_A_FIXER{background:#fff5dc;color:#7a5400;border-color:#ffe1a3}
+.tag.t-CLIENT_A_RECONTACTER{background:#e9f2ff;color:#214c9c;border-color:#cfe0ff}
+.tag.t-COMMANDE_PIECES{background:#efe7ff;color:#3d227e;border-color:#dacfff}
+.tag.t-SUIVI_ESCALADE{background:#e6fbf7;color:#0b5a52;border-color:#b6efe6}
+.tag.t-CONFIRMER_CONTACT{background:#e9f2ff;color:#214c9c;border-color:#cfe0ff}
+.tag.t-DIAGNOSTIC_A_REALISER{background:#ffe3e6;color:#7a1d27;border-color:#ffc2c8}
+.tag.t-VERIFIER_DISPO_PIECE{background:#fff5dc;color:#7a5400;border-color:#ffe1a3}
+.tag.t-RDV_CONFIRME{background:#e7fbef;color:#0d6b2d;border-color:#bcefd1}
 
+/* ------------------ BADGES (FLAGS) ------------------ */
+td.col-flags .badge + .badge{ margin-left:8px; }
 
+.badge{
+    display:inline-block;padding:3px 8px;border-radius:999px;font-size:12px;line-height:1.1;
+    border:1px solid var(--line);font-weight:700;letter-spacing:.2px;
+}
+.badge-urgent{
+    background:var(--tag-coral);color:var(--tag-coral-ink);border-color:#ffc2c8;
+}
+.badge-me{
+    background:var(--tag-blue);color:var(--tag-blue-ink);border-color:#cfe0ff;
+}
+/* si urgent & vous : harmonise VOUS en rouge */
+.row-urgent-me .badge-me,
+.badge-me-over-urgent{
+    background:var(--tag-coral) !important;color:var(--tag-coral-ink) !important;border-color:#ffc2c8 !important;
+}
+
+/* ------------------ ACCENT LIGNES (sans décalage) ------------------ */
+.row-urgent-me { box-shadow: inset 3px 0 #ff7a86; }
+.row-urgent    { box-shadow: inset 2px 0 #ffabb4; }
+.row-me        { box-shadow: inset 2px 0 #9fc4ff; }
+
+/* (sécurité) désactive toute ancienne barre ::before si existait */
+.row-urgent-me::before, .row-urgent::before, .row-me::before{ content:none !important; display:none !important; }
