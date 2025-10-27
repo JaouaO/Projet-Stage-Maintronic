@@ -29,14 +29,16 @@ class InterventionService
         }
 
         $query = DB::table('t_actions_etat as ae')
+            // ↓ Joint les labels d’affectation si ae.objet_traitement = CODE.
             ->leftJoin('t_actions_vocabulaire as v', function ($join) {
-                $join->on('v.code', '=', 'ae.objet_traitement')   // <= si objet_traitement contient le CODE
-                ->where('v.group_code', '=', 'AFFECTATION');
+                $join->on('v.code', '=', 'ae.objet_traitement')
+                    ->where('v.group_code', '=', 'AFFECTATION');
 
-                // Si, chez vous, objet_traitement contient le LABEL et non le code,
-                // remplacez la ligne de jointure par :
+                // Si chez vous objet_traitement contient le LABEL (et pas le code), utilisez plutôt :
                 // $join->on('v.label', '=', 'ae.objet_traitement')->where('v.group_code', '=', 'AFFECTATION');
             })
+            // ↓ Joint t_intervention pour alimenter l’accordéon (marque/ville/cp/commentaire)
+            ->leftJoin('t_intervention as ti', 'ti.NumInt', '=', 'ae.NumInt')
             ->selectRaw("
             ae.NumInt AS num_int,
             COALESCE(NULLIF(ae.contact_reel,''), '(contact inconnu)') AS client,
@@ -53,6 +55,12 @@ class InterventionService
             -- À faire : code/label depuis vocab AFFECTATION
             v.code  AS a_faire_code,
             COALESCE(NULLIF(v.label,''), COALESCE(NULLIF(ae.objet_traitement,''), 'À préciser')) AS a_faire_label,
+
+            -- === Champs accordéon (provenant de t_intervention) ===
+            ti.Marque AS marque,
+            ti.VilleLivCli AS ville,
+            ti.CPLivCli   AS cp,
+            CAST(ti.CommentInterne AS CHAR) AS commentaire,
 
             -- Ordre de priorité
             CASE
@@ -76,6 +84,7 @@ class InterventionService
 
         return $query->paginate($perPage);
     }
+
 
 
     /**

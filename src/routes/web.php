@@ -38,6 +38,9 @@ Route::post('/accueil/entree', [MainController::class, 'entree'])
 Route::get('/interventions', [MainController::class, 'showInterventions'])
     ->name('interventions.show')->middleware('check.session');
 
+Route::get('/interventions/{numInt}/history', [MainController::class, 'history'])
+    ->name('interventions.history');
+
 Route::get('/interventions/{numInt}', [MainController::class, 'editIntervention'])
     ->name('interventions.edit')->middleware('check.session');
 

@@ -4,8 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\NotBlankRequest;
 use App\Http\Requests\UpdateInterventionRequest;
+use App\Services\AccessInterventionService;
 use App\Services\DTO\RdvTemporaireDTO;
 use App\Services\DTO\UpdateInterventionDTO;
+use App\Services\InterventionHistoryService;
 use App\Services\InterventionService;
 use App\Services\PlanningService;
 use App\Services\TraitementDossierService;
@@ -15,6 +17,7 @@ use Illuminate\Http\Request;
 use App\Services\AuthService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\View;
 
 class MainController extends Controller
 {
@@ -25,6 +28,8 @@ class MainController extends Controller
     private PlanningWriteService $planningWriteService;
 
     private UpdateInterventionService $updateInterventionService;
+    private AccessInterventionService $accessInterventionService;
+    private InterventionHistoryService $historyService;
 
     public function __construct(
         AuthService               $authService,
@@ -32,7 +37,9 @@ class MainController extends Controller
         TraitementDossierService  $traitementDossierService,
         PlanningService           $planningService,
         PlanningWriteService      $planningWriteService,
-        UpdateInterventionService $updateInterventionService
+        UpdateInterventionService $updateInterventionService,
+        AccessInterventionService $accessInterventionService,
+        InterventionHistoryService $historyService
     )
     {
         $this->authService = $authService;
@@ -41,6 +48,8 @@ class MainController extends Controller
         $this->planningService = $planningService;
         $this->planningWriteService = $planningWriteService;
         $this->updateInterventionService = $updateInterventionService;
+        $this->accessInterventionService = $accessInterventionService;
+        $this->historyService = $historyService;
     }
 
     public function showLoginForm()
@@ -118,6 +127,27 @@ class MainController extends Controller
             'perPage'       => $perPage,
         ]);
     }
+    public function history(Request $request, string $numInt): \Illuminate\Http\Response
+    {
+        // Récupération à la demande (service dédié)
+        $suivis = $this->historyService->fetchHistory($numInt);
+
+        // Si tu préfères renvoyer une page HTML autonome (parfait pour window.open)
+        // crée la vue resources/views/interventions/history_popup.blade.php
+        if (View::exists('interventions.history_popup')) {
+            return response()->view('interventions.history_popup', [
+                'numInt' => $numInt,
+                'suivis' => $suivis,
+            ]);
+        }
+
+        // Fallback minimal (au cas où la vue n’est pas encore créée)
+        return response()->view('interventions.history_fallback', [
+            'numInt' => $numInt,
+            'suivis' => $suivis,
+        ]);
+    }
+
 
 
     public function entree(NotBlankRequest $request)
@@ -139,14 +169,19 @@ class MainController extends Controller
     public function editIntervention($numInt)
     {
         $payload = $this->traitementDossierService->loadEditPayload($numInt);
-
         if (!$payload['interv']) {
             return redirect()
                 ->route('accueil', ['id' => session('id')])
                 ->with('error', 'Intervention introuvable.');
         }
 
-        return view('interventions.edit', $payload);
+        // ↓ Liste unifiée des personnes sélectionnables pour ce dossier
+        $people = $this->accessInterventionService->listPeopleForNumInt($numInt);
+
+        // vous pouvez passer $people à vos partials au lieu de techniciens/salaries
+        return view('interventions.edit', $payload + [
+                'people' => $people, // Collection de {CodeSal, NomSal, CodeAgSal, access_level}
+            ]);
     }
 
     /** API planning */
