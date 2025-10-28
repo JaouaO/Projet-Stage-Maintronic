@@ -176,67 +176,67 @@ class UpdateInterventionService
 
     }
     public function createMinimal(
-        string  $numInt,
-        ?string $marque        = null,
-        ?string $ville         = null,
-        ?string $cp            = null,
-        ?string $datePrev      = null,   // YYYY-MM-DD
-        ?string $heurePrev     = null,   // HH:MM
-        ?string $commentaire   = null,
-        ?string $auteur        = null,
-        bool    $urgent        = false,
-        ?string $reaffecteCode = null    // ex: le CodeSal de la personne concernée
+        string $numInt,
+        ?string $marque,
+        ?string $ville,
+        ?string $cp,
+        ?string $datePrev,      // YYYY-MM-DD
+        ?string $heurePrev,     // HH:ii
+        ?string $commentaire,
+        ?string $auteur,
+        bool $urgent,
+        ?string $reaffecteCode
     ): void
     {
-        $now = $this->clock->now(); // Europe/Paris déjà configuré dans ton service
+        DB::transaction(function () use ($numInt, $marque, $ville, $cp, $datePrev, $heurePrev, $commentaire, $auteur, $urgent, $reaffecteCode) {
 
-        DB::transaction(function () use (
-            $numInt, $marque, $ville, $cp, $datePrev, $heurePrev, $commentaire, $auteur, $urgent, $reaffecteCode, $now
-        ) {
-            // 1) t_intervention (insert si n’existe pas)
-            $ti = [
-                'NumInt'        => $numInt,
-                'Marque'        => $marque,
-                'VilleLivCli'   => $ville,
-                'CPLivCli'      => $cp,
-            ];
-            if ($datePrev && $heurePrev) {
-                $ti['DateIntPrevu']  = $datePrev;
-                $ti['HeureIntPrevu'] = $heurePrev;
-            }
-            DB::table('t_intervention')->updateOrInsert(['NumInt' => $numInt], array_filter($ti, fn($v)=>$v!==null));
+            // 1) t_intervention
+            $fields = ['NumInt' => $numInt];
+            if ($marque !== null) $fields['Marque'] = $marque;
+            if ($ville  !== null) $fields['VilleLivCli'] = $ville;
+            if ($cp     !== null) $fields['CPLivCli']    = $cp;
+            if ($datePrev !== null) $fields['DateIntPrevu']  = $datePrev;
+            if ($heurePrev !== null) $fields['HeureIntPrevu'] = $heurePrev;
 
-            // 2) t_actions_etat (snapshot initial)
+            // upsert simple
+            DB::table('t_intervention')->updateOrInsert(['NumInt' => $numInt], $fields);
+
+            // 2) t_actions_etat (bits init à 0)
+            // Si vous avez des colonnes supplémentaires, ajoutez-les ici.
             $etat = [
                 'NumInt'           => $numInt,
-                'objet_traitement' => 'À préciser',   // valeur par défaut lisible dans ta liste
+                'bits_traitement'  => 0,
+                'bits_affectation' => 0,
+                'objet_traitement' => 'À préciser',
                 'urgent'           => $urgent ? 1 : 0,
-                'commentaire'      => $commentaire,
-                'reaffecte_code'   => $reaffecteCode,
-                'bits_traitement'  => '0000000000000',
-                'bits_affectation' => '00000000',
+                'commentaire'      => $commentaire ?: null,
+                'reaffecte_code'   => $reaffecteCode ?: null,
             ];
 
-            // rdv_prev_at si date/heure saisies
+            // Si on a une date/heure prévues, renseigner rdv_prev_at (si elle existe chez vous)
             if ($datePrev && $heurePrev) {
-                $start = $this->clock->parseLocal($datePrev, $heurePrev);
-                $etat['rdv_prev_at'] = $start;
+                try {
+                    $dt = Carbon::createFromFormat('Y-m-d H:i', $datePrev.' '.$heurePrev, 'Europe/Paris');
+                    // Colonne souvent présente : rdv_prev_at (DATETIME). Adaptez si nécessaire.
+                    $etat['rdv_prev_at'] = $dt->toDateTimeString();
+                } catch (\Throwable $e) {
+                    // tolérant : on ignore si parsing foire
+                }
             }
 
-            DB::table('t_actions_etat')->updateOrInsert(['NumInt' => $numInt], array_filter($etat, fn($v)=>$v!==null));
+            // UPSERT avec fallback (si déjà présent, on met à jour les champs utiles)
+            $exists = DB::table('t_actions_etat')->where('NumInt', $numInt)->exists();
+            if ($exists) {
+                DB::table('t_actions_etat')->where('NumInt', $numInt)->update($etat);
+            } else {
+                DB::table('t_actions_etat')->insert($etat);
+            }
 
-            // 3) Historique
-            $evtMeta = $this->vocabService->pruneNulls([
-                'd'   => $datePrev ?: null,
-                'h'   => $heurePrev ?: null,
-                'lab' => mb_substr((string)$commentaire, 0, 60) ?: null,
-                'urg' => $urgent ? 1 : null,
-                't'   => $reaffecteCode ?: null,
-            ]);
-            $this->historyWriteService->log($numInt, 'CREATED', $evtMeta, 'Création', (string)$commentaire, (string)$auteur);
+            // 3) Journalisation minimale (optionnel)
+            if (!empty($auteur)) {
+                $meta = ['lab' => $commentaire ? mb_substr($commentaire, 0, 60) : null, 'urg' => $urgent ? 1 : null];
+                $this->historyWriteService->log($numInt, 'CREATED', $meta, 'Création', $commentaire ?: '', $auteur);
+            }
         });
     }
-
-
-
 }

@@ -12,6 +12,7 @@ use App\Services\InterventionService;
 use App\Services\PlanningService;
 use App\Services\TraitementDossierService;
 use App\Services\UpdateInterventionService;
+use App\Services\Utils\ParisClockService;
 use App\Services\Write\PlanningWriteService;
 use Illuminate\Http\Request;
 use App\Services\AuthService;
@@ -30,6 +31,7 @@ class MainController extends Controller
     private UpdateInterventionService $updateInterventionService;
     private AccessInterventionService $accessInterventionService;
     private InterventionHistoryService $historyService;
+    private ParisClockService $clockService;
 
     public function __construct(
         AuthService               $authService,
@@ -39,7 +41,8 @@ class MainController extends Controller
         PlanningWriteService      $planningWriteService,
         UpdateInterventionService $updateInterventionService,
         AccessInterventionService $accessInterventionService,
-        InterventionHistoryService $historyService
+        InterventionHistoryService $historyService,
+        ParisClockService $clockService
     )
     {
         $this->authService = $authService;
@@ -50,6 +53,7 @@ class MainController extends Controller
         $this->updateInterventionService = $updateInterventionService;
         $this->accessInterventionService = $accessInterventionService;
         $this->historyService = $historyService;
+        $this->clockService = $clockService;
     }
 
     public function showLoginForm()
@@ -292,7 +296,7 @@ class MainController extends Controller
         }
     }
 
-    public function rdvTempPurge(Request $request, string $numInt)
+    public function rdvTempPurge(Request $request, string $numInt): \Illuminate\Http\JsonResponse
     {
         try {
             $deleted = $this->planningWriteService->purgeTempsByNumInt($numInt);
@@ -323,9 +327,24 @@ class MainController extends Controller
 
     public function createIntervention(Request $request)
     {
-        $now = \Carbon\Carbon::now('Europe/Paris');
+        $agencesAutorisees = (array) $request->session()->get('agences_autorisees', []);
+        if (empty($agencesAutorisees)) {
+            return redirect()->route('interventions.show')
+                ->with('error', 'Aucune agence autorisée pour ce compte.');
+        }
+
+        $now    = $this->clockService->now(); // ← au lieu de Carbon::now()
+        $agence = (string) ($request->query('agence') ?: reset($agencesAutorisees));
+        try {
+            $suggest = $this->interventionService->nextNumInt($agence, $now); // $now est un Carbon
+        } catch (\Throwable $e) {
+            $suggest = '';
+        }
 
         return view('interventions.create', [
+            'agences'  => $agencesAutorisees,
+            'agence'   => $agence,
+            'suggest'  => $suggest,
             'defaults' => [
                 'DateIntPrevu'  => $now->toDateString(),
                 'HeureIntPrevu' => $now->format('H:i'),
@@ -335,14 +354,36 @@ class MainController extends Controller
                 'Commentaire'   => '',
                 'Urgent'        => false,
             ],
-            'codeSal' => (string) session('codeSal', ''),
+            'codeSal' => (string) $request->session()->get('codeSal', ''),
         ]);
+    }
+
+    public function suggestNumInt(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $agence = (string) $request->query('agence', '');
+        $agencesAutorisees = (array) $request->session()->get('agences_autorisees', []);
+        if ($agence === '' || !in_array($agence, $agencesAutorisees, true)) {
+            return response()->json(['ok' => false, 'msg' => 'Agence non autorisée'], 403);
+        }
+
+        $dateStr = (string) $request->query('date', '');
+        // Si une date YYYY-MM-DD est fournie, on fabrique un Carbon en locale via le clock
+        $date = $dateStr ? $this->clockService->parseLocal($dateStr, '00:00')
+            : $this->clockService->now();
+
+        try {
+            $num = $this->interventionService->nextNumInt($agence, $date);
+            return response()->json(['ok' => true, 'numInt' => $num]);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'msg' => $e->getMessage()], 500);
+        }
     }
 
     public function storeIntervention(Request $request): \Illuminate\Http\RedirectResponse
     {
         $data = $request->validate([
-            'NumInt'        => ['required','regex:/^[A-Za-z0-9_-]+$/','unique:t_intervention,NumInt'],
+            'Agence'        => ['required','regex:/^[A-Za-z0-9_-]{3,6}$/'],
+            'NumInt'        => ['nullable','regex:/^[A-Za-z0-9_-]+$/','unique:t_intervention,NumInt'],
             'Marque'        => ['nullable','string','max:60'],
             'VilleLivCli'   => ['nullable','string','max:80'],
             'CPLivCli'      => ['nullable','string','max:10'],
@@ -353,28 +394,38 @@ class MainController extends Controller
             'Concerne'      => ['nullable','boolean'],
         ]);
 
-        $codeSal = (string) session('codeSal', '');
+        $agencesAutorisees = (array) $request->session()->get('agences_autorisees', []);
+        if (!in_array($data['Agence'], $agencesAutorisees, true)) {
+            return back()->withErrors(['Agence' => 'Agence non autorisée'])->withInput();
+        }
+
+        // Date de référence pour le YYMM du NumInt
+        $dateRef = !empty($data['DateIntPrevu'])
+            ? $this->clockService->parseLocal($data['DateIntPrevu'], '00:00') // ← clock
+            : $this->clockService->now();
+
+        $numInt = !empty($data['NumInt'])
+            ? $data['NumInt']
+            : $this->interventionService->nextNumInt($data['Agence'], $dateRef);
+
+        $codeSal = (string) $request->session()->get('codeSal', '');
         $reaff   = !empty($data['Concerne']) ? ($codeSal ?: null) : null;
 
-        // Appel service SANS named-args (ordre des params respecté)
         $this->updateInterventionService->createMinimal(
-            $data['NumInt'],                       // string  $numInt
-            isset($data['Marque'])        ? $data['Marque']        : null, // ?string $marque
-            isset($data['VilleLivCli'])   ? $data['VilleLivCli']   : null, // ?string $ville
-            isset($data['CPLivCli'])      ? $data['CPLivCli']      : null, // ?string $cp
-            isset($data['DateIntPrevu'])  ? $data['DateIntPrevu']  : null, // ?string $datePrev
-            isset($data['HeureIntPrevu']) ? $data['HeureIntPrevu'] : null, // ?string $heurePrev
-            isset($data['Commentaire'])   ? $data['Commentaire']   : null, // ?string $commentaire
-            $codeSal ?: 'system',                                                   // ?string $auteur
-            !empty($data['Urgent']),                                               // bool    $urgent
-            $reaff                                                                  // ?string $reaffecteCode
+            $numInt,
+            $data['Marque'] ?? null,
+            $data['VilleLivCli'] ?? null,
+            $data['CPLivCli'] ?? null,
+            $data['DateIntPrevu'] ?? null,
+            $data['HeureIntPrevu'] ?? null,
+            $data['Commentaire'] ?? null,
+            $codeSal ?: 'system',
+            !empty($data['Urgent']),
+            $reaff
         );
 
-        return redirect()
-            ->route('interventions.edit', $data['NumInt'])
-            ->with('ok', 'Intervention créée.');
+        return redirect()->route('interventions.edit', $numInt)->with('ok', 'Intervention créée.');
     }
-
 
 //return redirect('/ClientInfo?id=' . session('user')->idUser . '&action=dossier-detail&numInt=' . $numInt);
 }

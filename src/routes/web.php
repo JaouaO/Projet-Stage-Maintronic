@@ -36,17 +36,23 @@ Route::post('/accueil/entree', [MainController::class, 'entree'])
     ->name('accueil.entree')->middleware('check.session');
 
 
-Route::get('/interventions', [MainController::class, 'showInterventions'])
-    ->name('interventions.show')->middleware('check.session');
-
 Route::get('/interventions/nouvelle', [MainController::class, 'createIntervention'])
     ->name('interventions.create')->middleware('check.session');
+
+Route::get('/interventions/suggest-num', [MainController::class, 'suggestNumInt'])
+    ->name('interventions.suggest')->middleware('check.session');
+
+Route::get('/interventions', [MainController::class, 'showInterventions'])
+    ->name('interventions.show')
+    ->middleware('check.session');
 
 Route::post('/interventions', [MainController::class, 'storeIntervention'])
     ->name('interventions.store')->middleware('check.session');
 
+
+
 // Contrainte: tout sauf exactement "nouvelle"
-$NUMINT_RE = '(?!nouvelle$)[A-Za-z0-9_-]+';
+$NUMINT_RE = '^(?!nouvelle$)[A-Za-z0-9_-]+$';
 
 Route::get('/interventions/{numInt}/history', [MainController::class, 'history'])
     ->name('interventions.history')
@@ -80,7 +86,7 @@ Route::post('/interventions/{numInt}/rdv/temporaire/purge', [MainController::cla
 
 Route::delete('/interventions/{numInt}/rdv/temporaire/{id}', [MainController::class, 'rdvTempDelete'])
     ->name('rdv.temp.delete')
-    ->where(['numInt' => $NUMINT_RE, 'id' => '[0-9]+'])
+    ->where(['numInt' => $NUMINT_RE, 'id' => '^[0-9]+$'])
     ->middleware('check.session');
 
 

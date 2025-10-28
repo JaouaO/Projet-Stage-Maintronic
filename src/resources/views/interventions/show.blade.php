@@ -62,13 +62,13 @@
                 <div class="tableArea">
                     <table class="table" id="intervTable">
                         <colgroup>
-                            <col style="width:150px">
-                            <col style="width:280px">
-                            <col style="width:110px">
-                            <col style="width:80px">
-                            <col style="width:360px">
-                            <col style="width:170px">
-                            <col style="width:180px">
+                            <col class="colw-id">
+                            <col class="colw-client">
+                            <col class="colw-date">
+                            <col class="colw-heure">
+                            <col class="colw-todo">
+                            <col class="colw-flags">
+                            <col class="colw-act">
                         </colgroup>
                         <thead>
                         <tr>

@@ -9,15 +9,15 @@ use Carbon\Carbon;
 
 class InterventionService
 {
-/**
-* N'affiche que les interventions dont le NumInt commence par une agence autorisée.
-* - client        = contact_reel (fallback "(contact inconnu)")
-* - a_faire       = objet_traitement (fallback "À préciser")
-* - date/heure    = COALESCE(tech_rdv_at, rdv_prev_at)
-* - urgent        = t_actions_etat.urgent
-* - concerne      = reaffecte_code==$codeSal OR tech_code==$codeSal
-* - tri           = concerne DESC, urgent DESC, date/heure ASC, NumInt ASC
-*/
+    /**
+     * N'affiche que les interventions dont le NumInt commence par une agence autorisée.
+     * - client        = contact_reel (fallback "(contact inconnu)")
+     * - a_faire       = objet_traitement (fallback "À préciser")
+     * - date/heure    = COALESCE(tech_rdv_at, rdv_prev_at)
+     * - urgent        = t_actions_etat.urgent
+     * - concerne      = reaffecte_code==$codeSal OR tech_code==$codeSal
+     * - tri           = concerne DESC, urgent DESC, date/heure ASC, NumInt ASC
+     */
 // App\Services\InterventionService::listPaginatedSimple(...)
 
     // App\Services\InterventionService
@@ -26,8 +26,8 @@ class InterventionService
 
 
     public function listPaginatedSimple(
-        int $perPage = 25,
-        array $agencesAutorisees = [],
+        int     $perPage = 25,
+        array   $agencesAutorisees = [],
         ?string $codeSal = null,
         ?string $q = null,           // ← NEW
         ?string $scope = null        // ← NEW: 'urgent' | 'me' | 'both'
@@ -72,9 +72,9 @@ class InterventionService
         ", [$codeSal, $codeSal, $codeSal])
             ->where(function ($qW) use ($agencesAutorisees) {
                 foreach ($agencesAutorisees as $i => $ag) {
-                    if (!is_string($ag) || $ag==='') continue;
-                    $method = $i===0 ? 'where' : 'orWhere';
-                    $qW->{$method}('ae.NumInt', 'like', $ag.'%');
+                    if (!is_string($ag) || $ag === '') continue;
+                    $method = $i === 0 ? 'where' : 'orWhere';
+                    $qW->{$method}('ae.NumInt', 'like', $ag . '%');
                 }
             });
 
@@ -105,8 +105,8 @@ class InterventionService
 
         // ---- (2) Recherche mot-clé q ----
         if ($q !== null && ($q = trim($q)) !== '') {
-            $like = '%'.str_replace(['%', '_'], ['\\%', '\\_'], $q).'%';
-            $query->where(function($w) use ($like){
+            $like = '%' . str_replace(['%', '_'], ['\\%', '\\_'], $q) . '%';
+            $query->where(function ($w) use ($like) {
                 $w->where('ae.NumInt', 'like', $like)
                     ->orWhere('ae.contact_reel', 'like', $like)
                     ->orWhere('v.label', 'like', $like)              // label du vocabulaire
@@ -115,34 +115,32 @@ class InterventionService
         }
 
         // Tri identique
-        $query->orderBy('tier','asc')
+        $query->orderBy('tier', 'asc')
             ->orderByRaw(" ae.rdv_prev_at IS NULL ASC")
             ->orderByRaw(" ae.rdv_prev_at ASC")
-            ->orderBy('ae.NumInt','ASC');
+            ->orderBy('ae.NumInt', 'ASC');
 
         return $query->paginate($perPage);
     }
 
 
-
-
     /**
-    * Variante non paginée (même logique de filtre/tri) si besoin ailleurs.
-    */
+     * Variante non paginée (même logique de filtre/tri) si besoin ailleurs.
+     */
     public function list(int $limit = 300, array $agencesAutorisees = [], ?string $codeSal = null): array
     {
-    if (empty($agencesAutorisees)) {
-    return [
-    'rows'       => collect(),
-    'counts'     => collect(),
-    'nextIndex'  => null,
-    'nextNumInt' => null,
-    'total'      => 0,
-    ];
-    }
+        if (empty($agencesAutorisees)) {
+            return [
+                'rows' => collect(),
+                'counts' => collect(),
+                'nextIndex' => null,
+                'nextNumInt' => null,
+                'total' => 0,
+            ];
+        }
 
-    $rows = DB::table('t_actions_etat as ae')
-    ->selectRaw("
+        $rows = DB::table('t_actions_etat as ae')
+            ->selectRaw("
     ae.NumInt AS num_int,
     COALESCE(NULLIF(ae.contact_reel,''), '(contact inconnu)') AS client,
     COALESCE(NULLIF(ae.objet_traitement,''), 'À préciser') AS a_faire,
@@ -152,52 +150,78 @@ class InterventionService
     ae.urgent AS urgent,
     CASE WHEN ae.reaffecte_code = ? THEN 1 ELSE 0 END AS concerne
     ", [$codeSal, $codeSal])
-    ->where(function ($q) use ($agencesAutorisees) {
-    foreach ($agencesAutorisees as $i => $ag) {
-    if (!is_string($ag) || $ag === '') continue;
-    $method = $i === 0 ? 'where' : 'orWhere';
-    $q->{$method}('ae.NumInt', 'like', $ag . '%');
-    }
-    })
-    ->orderByDesc('concerne')
-    ->orderByDesc('urgent')
-    ->orderByRaw("ae.rdv_prev_at IS NULL ASC")
-    ->orderByRaw("ae.rdv_prev_at ASC")
-    ->orderBy('ae.NumInt', 'ASC')
-    ->limit($limit)
-    ->get();
+            ->where(function ($q) use ($agencesAutorisees) {
+                foreach ($agencesAutorisees as $i => $ag) {
+                    if (!is_string($ag) || $ag === '') continue;
+                    $method = $i === 0 ? 'where' : 'orWhere';
+                    $q->{$method}('ae.NumInt', 'like', $ag . '%');
+                }
+            })
+            ->orderByDesc('concerne')
+            ->orderByDesc('urgent')
+            ->orderByRaw("ae.rdv_prev_at IS NULL ASC")
+            ->orderByRaw("ae.rdv_prev_at ASC")
+            ->orderBy('ae.NumInt', 'ASC')
+            ->limit($limit)
+            ->get();
 
-    $counts = $rows->groupBy('a_faire')->map->count();
-    [$nextNumInt, $nextIndex] = $this->computeNext($rows);
+        $counts = $rows->groupBy('a_faire')->map->count();
+        [$nextNumInt, $nextIndex] = $this->computeNext($rows);
 
-    return [
-    'rows'       => $rows,
-    'counts'     => $counts,
-    'nextIndex'  => $nextIndex,
-    'nextNumInt' => $nextNumInt,
-    'total'      => $rows->count(),
-    ];
+        return [
+            'rows' => $rows,
+            'counts' => $counts,
+            'nextIndex' => $nextIndex,
+            'nextNumInt' => $nextNumInt,
+            'total' => $rows->count(),
+        ];
     }
 
     private function computeNext(Collection $rows): array
     {
-    $bestIdx = null;
-    $bestTs  = null;
+        $bestIdx = null;
+        $bestTs = null;
 
-    foreach ($rows as $idx => $r) {
-    if (empty($r->date_prev) || empty($r->heure_prev)) continue;
-    try {
-    $ts = Carbon::parse($r->date_prev.' '.$r->heure_prev);
-    } catch (\Throwable $e) {
-    continue;
-    }
-    if ($bestTs === null || $ts->lt($bestTs)) {
-    $bestTs  = $ts;
-    $bestIdx = $idx;
-    }
+        foreach ($rows as $idx => $r) {
+            if (empty($r->date_prev) || empty($r->heure_prev)) continue;
+            try {
+                $ts = Carbon::parse($r->date_prev . ' ' . $r->heure_prev);
+            } catch (\Throwable $e) {
+                continue;
+            }
+            if ($bestTs === null || $ts->lt($bestTs)) {
+                $bestTs = $ts;
+                $bestIdx = $idx;
+            }
+        }
+
+        $num = $bestIdx !== null ? ($rows[$bestIdx]->num_int ?? null) : null;
+        return [$num, $bestIdx];
     }
 
-    $num = $bestIdx !== null ? ($rows[$bestIdx]->num_int ?? null) : null;
-    return [$num, $bestIdx];
+    public function nextNumInt(string $agence, Carbon $date): string
+    {
+        $agence = trim($agence);
+        if ($agence === '' || !preg_match('/^[A-Za-z0-9_-]{3,6}$/', $agence)) {
+            throw new \InvalidArgumentException('Code agence invalide.');
+        }
+
+        $yymm   = $date->format('ym');          // ex: 2510
+        $prefix = $agence . '-' . $yymm . '-';  // ex: M44N-2510-
+
+        $last = DB::table('t_intervention')
+            ->where('NumInt', 'like', $prefix.'%')
+            ->max('NumInt'); // lexicographique OK vu le padding
+
+        $seq = 1;
+        if ($last) {
+            $parts = explode('-', $last);
+            $tail  = end($parts) ?: '00000';
+            $seq   = (int) $tail + 1;
+        }
+
+        $seqStr = str_pad((string)$seq, 5, '0', STR_PAD_LEFT);
+        return $prefix.$seqStr;
     }
-    }
+
+}

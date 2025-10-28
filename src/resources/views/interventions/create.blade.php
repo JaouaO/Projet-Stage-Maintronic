@@ -1,93 +1,91 @@
-
 @extends('layouts.base')
-@section('title','Créer une intervention')
+@section('title','Nouvelle intervention')
 
 @section('content')
     <link rel="stylesheet" href="{{ asset('css/interventions.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/interventions_create.css') }}">
+    <meta name="suggest-endpoint" content="{{ route('interventions.suggest') }}">
+    <div id="CreateIntervPage" class="app new-interv">
+        <div class="header b-header">
+            <h1>Nouvelle intervention</h1>
+        </div>
 
-    <div class="app">
-        <div class="card" style="max-width:860px;margin:0 auto">
+        <div class="card">
             <div class="cardBody">
-                @if ($errors->any())
-                    <div style="background:#ffe3e6;border:1px solid #ffc2c8;border-radius:8px;padding:8px 10px;margin-bottom:10px;color:#7a1d27">
-                        <strong>Erreurs :</strong>
-                        <ul style="margin:6px 0 0 18px;padding:0">
-                            @foreach ($errors->all() as $err)
-                                <li>{{ $err }}</li>
-                            @endforeach
-                        </ul>
-                    </div>
-                @endif
-
-                <form method="post" action="{{ route('interventions.store') }}" class="b-form">
+                <form method="post" action="{{ route('interventions.store') }}" id="createForm" class="b-form">
                     @csrf
-                    <div class="b-grid">
+
+                    {{-- Agence + NumInt (auto) --}}
+                    <div class="grid-agence-num">
                         <div class="b-field">
-                            <label for="NumInt">Numéro intervention *</label>
-                            <input id="NumInt" name="NumInt" required value="{{ old('NumInt') }}" placeholder="Ex: M34M-12345">
-                            <small>Alphanumérique, tirets/underscores autorisés, unique.</small>
+                            <label for="Agence">Agence</label>
+                            <select id="Agence" name="Agence" required>
+                                @foreach($agences as $ag)
+                                    <option value="{{ $ag }}" {{ $ag === $agence ? 'selected' : '' }}>{{ $ag }}</option>
+                                @endforeach
+                            </select>
                         </div>
 
+                        <div class="b-field">
+                            <label for="NumInt">Numéro d’intervention <span class="badge-auto">auto</span></label>
+                            <input id="NumInt" name="NumInt" type="text" value="{{ $suggest }}" readonly>
+                            @error('NumInt')<div class="err">{{ $message }}</div>@enderror
+                        </div>
+                    </div>
+
+                    {{-- Infos --}}
+                    <div class="grid-infos mt-8">
                         <div class="b-field">
                             <label for="Marque">Marque</label>
-                            <input id="Marque" name="Marque" value="{{ old('Marque') ?? ($defaults['Marque'] ?? '') }}">
+                            <input id="Marque" name="Marque" type="text" value="{{ old('Marque', $defaults['Marque']) }}">
                         </div>
-
                         <div class="b-field">
                             <label for="VilleLivCli">Ville</label>
-                            <input id="VilleLivCli" name="VilleLivCli" value="{{ old('VilleLivCli') ?? ($defaults['VilleLivCli'] ?? '') }}">
+                            <input id="VilleLivCli" name="VilleLivCli" type="text" value="{{ old('VilleLivCli', $defaults['VilleLivCli']) }}">
                         </div>
-
                         <div class="b-field">
-                            <label for="CPLivCli">Code postal</label>
-                            <input id="CPLivCli" name="CPLivCli" value="{{ old('CPLivCli') ?? ($defaults['CPLivCli'] ?? '') }}">
-                        </div>
-
-                        <div class="b-field">
-                            <label for="DateIntPrevu">Date prévue</label>
-                            <input type="date" id="DateIntPrevu" name="DateIntPrevu" value="{{ old('DateIntPrevu') ?? ($defaults['DateIntPrevu'] ?? '') }}">
-                        </div>
-
-                        <div class="b-field">
-                            <label for="HeureIntPrevu">Heure prévue</label>
-                            <input type="time" id="HeureIntPrevu" name="HeureIntPrevu" value="{{ old('HeureIntPrevu') ?? ($defaults['HeureIntPrevu'] ?? '') }}">
-                        </div>
-
-                        <div class="b-field b-full">
-                            <label for="Commentaire">Commentaire</label>
-                            <textarea id="Commentaire" name="Commentaire" rows="3" placeholder="Notes internes, contexte…">{{ old('Commentaire') ?? ($defaults['Commentaire'] ?? '') }}</textarea>
-                        </div>
-
-                        <div class="b-field">
-                            <label><input type="checkbox" name="Urgent" value="1" {{ old('Urgent') ? 'checked' : '' }}> Marquer urgent</label>
-                        </div>
-
-                        <div class="b-field">
-                            <label><input type="checkbox" name="Concerne" value="1" {{ old('Concerne') ? 'checked' : '' }}> M’assigner (VOUS)</label>
-                            <small>Utilise votre CodeSal : <strong>{{ $codeSal ?: '—' }}</strong></small>
+                            <label for="CPLivCli">CP <span class="hint">(optionnel)</span></label>
+                            <input id="CPLivCli" name="CPLivCli" type="text" value="{{ old('CPLivCli', $defaults['CPLivCli']) }}">
                         </div>
                     </div>
 
-                    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
-                        <a class="btn btn-light" href="{{ route('interventions.show') }}">Annuler</a>
-                        <button class="btn" type="submit">Créer l’intervention</button>
+                    {{-- RDV (optionnel) --}}
+                    <div class="grid-rdv mt-8">
+                        <div class="b-field">
+                            <label for="DateIntPrevu">Date prévue</label>
+                            <input id="DateIntPrevu" name="DateIntPrevu" type="date" value="{{ old('DateIntPrevu', $defaults['DateIntPrevu']) }}">
+                        </div>
+                        <div class="b-field">
+                            <label for="HeureIntPrevu">Heure prévue</label>
+                            <input id="HeureIntPrevu" name="HeureIntPrevu" type="time" value="{{ old('HeureIntPrevu', $defaults['HeureIntPrevu']) }}">
+                        </div>
+                        <div class="b-field">
+                            <label for="Commentaire">Commentaire</label>
+                            <input id="Commentaire" name="Commentaire" type="text" value="{{ old('Commentaire', $defaults['Commentaire']) }}">
+                        </div>
+                    </div>
+
+                    {{-- Options --}}
+                    <div class="options-row">
+                        <label class="urgent-toggle" for="Urgent">
+                            <input type="hidden" name="Urgent" value="0">
+                            <input type="checkbox" id="Urgent" name="Urgent" value="1" {{ old('Urgent', $defaults['Urgent']) ? 'checked' : '' }}>
+                            <span>Urgent</span>
+                        </label>
+                    </div>
+
+                    {{-- Footer --}}
+                    <div class="footer">
+                        <div class="ft-actions">
+                            <a class="btn-light no-underline" href="{{ route('interventions.show') }}">↩︎ Annuler</a>
+                            <button class="btn-primary" type="submit">Créer l’intervention</button>
+                        </div>
                     </div>
                 </form>
             </div>
         </div>
     </div>
 
-    <style>
-        .b-form .b-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-        .b-form .b-full{grid-column:1 / -1}
-        .b-form .b-field{display:flex;flex-direction:column;gap:6px}
-        .b-form label{font-size:12px;color:var(--mut)}
-        .b-form input,.b-form textarea{
-            border:1px solid var(--line); border-radius:10px; background:#fff; color:var(--ink);
-            padding:9px 11px; font:13.5px/1.3 Inter,system-ui;
-        }
-        .b-form input:focus,.b-form textarea:focus{outline:none;border-color:#cfe0ff;box-shadow:0 0 0 3px #e9f2ff}
-        .b-form small{color:#8b93a7}
-        @media (max-width:900px){ .b-form .b-grid{grid-template-columns:1fr} }
-    </style>
+    {{-- Script séparé --}}
+    <script src="{{ asset('js/interventions_create.js') }}" defer></script>
 @endsection
