@@ -328,14 +328,18 @@ class MainController extends Controller
     public function createIntervention(Request $request)
     {
         $agencesAutorisees = (array) $request->session()->get('agences_autorisees', []);
+        $defaultAgence     = (string) $request->session()->get('defaultAgence', '');
+
         if (empty($agencesAutorisees)) {
             return redirect()->route('interventions.show')
                 ->with('error', 'Aucune agence autorisée pour ce compte.');
         }
 
         $now    = $this->clockService->now(); // ← au lieu de Carbon::now()
-        $agence = (string) ($request->query('agence') ?: reset($agencesAutorisees));
-        try {
+        $agence = (string) (
+        $request->query('agence')
+            ?: ($defaultAgence !== '' ? $defaultAgence : (reset($agencesAutorisees) ?: ''))
+        );        try {
             $suggest = $this->interventionService->nextNumInt($agence, $now); // $now est un Carbon
         } catch (\Throwable $e) {
             $suggest = '';
@@ -360,20 +364,34 @@ class MainController extends Controller
 
     public function suggestNumInt(Request $request): \Illuminate\Http\JsonResponse
     {
-        $agence = (string) $request->query('agence', '');
         $agencesAutorisees = (array) $request->session()->get('agences_autorisees', []);
+        if (empty($agencesAutorisees)) {
+            return response()->json(['ok' => false, 'msg' => 'Aucune agence autorisée'], 403);
+        }
+
+        // 1) Choix de l’agence
+        $agence = (string) $request->query('agence', '');
+        if ($agence === '') {
+            $agence = (string) $request->session()->get('defaultAgence', '');
+            if ($agence === '' || !in_array($agence, $agencesAutorisees, true)) {
+                $sorted = $agencesAutorisees; sort($sorted, SORT_NATURAL|SORT_FLAG_CASE);
+                $agence = (string) ($sorted[0] ?? '');
+            }
+        }
         if ($agence === '' || !in_array($agence, $agencesAutorisees, true)) {
             return response()->json(['ok' => false, 'msg' => 'Agence non autorisée'], 403);
         }
 
+        // 2) Date (optionnelle)
         $dateStr = (string) $request->query('date', '');
-        // Si une date YYYY-MM-DD est fournie, on fabrique un Carbon en locale via le clock
-        $date = $dateStr ? $this->clockService->parseLocal($dateStr, '00:00')
+        $date = $dateStr
+            ? $this->clockService->parseLocal($dateStr, '00:00')
             : $this->clockService->now();
 
+        // 3) Numéro auto
         try {
             $num = $this->interventionService->nextNumInt($agence, $date);
-            return response()->json(['ok' => true, 'numInt' => $num]);
+            return response()->json(['ok' => true, 'numInt' => $num, 'agence' => $agence]);
         } catch (\Throwable $e) {
             return response()->json(['ok' => false, 'msg' => $e->getMessage()], 500);
         }
