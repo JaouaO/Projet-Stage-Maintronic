@@ -107,12 +107,13 @@ class MainController extends Controller
         Log::info('[PING] updateAndPlanRdv atteint');
         $perPage = (int)$request->query('per_page', 10);
         if (!in_array($perPage, [10, 25, 50, 100], true)) $perPage = 10;
+        $q      = $request->query('q');            // ← NEW
+        $scope  = $request->query('scope');        // ← NEW
 
         $agencesAutorisees = (array) session('agences_autorisees', []);
         $codeSal           = (string) session('codeSal', '');
 
-        $rows = $this->interventionService->listPaginatedSimple($perPage, $agencesAutorisees, $codeSal);
-
+        $rows = $this->interventionService->listPaginatedSimple($perPage, $agencesAutorisees, $codeSal, $q, $scope);
         $todoTagClass = [
             // On garde vos classes de couleurs si vous voulez réutiliser l’affichage des tags.
             'CONFIRMER_RDV' => 'blue',
@@ -122,10 +123,13 @@ class MainController extends Controller
         ];
 
         return view('interventions.show', [
-            'rows'          => $rows,
-            'todoTagClass'  => $todoTagClass,
-            'perPage'       => $perPage,
+            'rows'         => $rows,
+            'todoTagClass' => $todoTagClass,
+            'perPage'      => $perPage,
+            'q'            => $q,       // ← NEW
+            'scope'        => $scope,   // ← NEW
         ]);
+
     }
     public function history(Request $request, string $numInt): \Illuminate\Http\Response
     {
@@ -315,6 +319,63 @@ class MainController extends Controller
             return response()->json(['ok' => false, 'msg' => $e->getMessage()], 500);
         }
     }
+// MainController.php (ajoute/replace seulement ces 2 méthodes)
 
+    public function createIntervention(Request $request)
+    {
+        $now = \Carbon\Carbon::now('Europe/Paris');
+
+        return view('interventions.create', [
+            'defaults' => [
+                'DateIntPrevu'  => $now->toDateString(),
+                'HeureIntPrevu' => $now->format('H:i'),
+                'VilleLivCli'   => '',
+                'CPLivCli'      => '',
+                'Marque'        => '',
+                'Commentaire'   => '',
+                'Urgent'        => false,
+            ],
+            'codeSal' => (string) session('codeSal', ''),
+        ]);
+    }
+
+    public function storeIntervention(Request $request): \Illuminate\Http\RedirectResponse
+    {
+        $data = $request->validate([
+            'NumInt'        => ['required','regex:/^[A-Za-z0-9_-]+$/','unique:t_intervention,NumInt'],
+            'Marque'        => ['nullable','string','max:60'],
+            'VilleLivCli'   => ['nullable','string','max:80'],
+            'CPLivCli'      => ['nullable','string','max:10'],
+            'DateIntPrevu'  => ['nullable','date'],
+            'HeureIntPrevu' => ['nullable','date_format:H:i'],
+            'Commentaire'   => ['nullable','string','max:1000'],
+            'Urgent'        => ['nullable','boolean'],
+            'Concerne'      => ['nullable','boolean'],
+        ]);
+
+        $codeSal = (string) session('codeSal', '');
+        $reaff   = !empty($data['Concerne']) ? ($codeSal ?: null) : null;
+
+        // Appel service SANS named-args (ordre des params respecté)
+        $this->updateInterventionService->createMinimal(
+            $data['NumInt'],                       // string  $numInt
+            isset($data['Marque'])        ? $data['Marque']        : null, // ?string $marque
+            isset($data['VilleLivCli'])   ? $data['VilleLivCli']   : null, // ?string $ville
+            isset($data['CPLivCli'])      ? $data['CPLivCli']      : null, // ?string $cp
+            isset($data['DateIntPrevu'])  ? $data['DateIntPrevu']  : null, // ?string $datePrev
+            isset($data['HeureIntPrevu']) ? $data['HeureIntPrevu'] : null, // ?string $heurePrev
+            isset($data['Commentaire'])   ? $data['Commentaire']   : null, // ?string $commentaire
+            $codeSal ?: 'system',                                                   // ?string $auteur
+            !empty($data['Urgent']),                                               // bool    $urgent
+            $reaff                                                                  // ?string $reaffecteCode
+        );
+
+        return redirect()
+            ->route('interventions.edit', $data['NumInt'])
+            ->with('ok', 'Intervention créée.');
+    }
+
+
+//return redirect('/ClientInfo?id=' . session('user')->idUser . '&action=dossier-detail&numInt=' . $numInt);
 }
 

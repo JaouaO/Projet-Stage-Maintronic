@@ -22,68 +22,107 @@ class InterventionService
 
     // App\Services\InterventionService
 
-    public function listPaginatedSimple(int $perPage = 25, array $agencesAutorisees = [], ?string $codeSal = null): LengthAwarePaginator
+    // App\Services\InterventionService
+
+
+    public function listPaginatedSimple(
+        int $perPage = 25,
+        array $agencesAutorisees = [],
+        ?string $codeSal = null,
+        ?string $q = null,           // ← NEW
+        ?string $scope = null        // ← NEW: 'urgent' | 'me' | 'both'
+    ): LengthAwarePaginator
     {
         if (empty($agencesAutorisees)) {
             return new LengthAwarePaginator(collect(), 0, $perPage);
         }
 
         $query = DB::table('t_actions_etat as ae')
-            // ↓ Joint les labels d’affectation si ae.objet_traitement = CODE.
             ->leftJoin('t_actions_vocabulaire as v', function ($join) {
                 $join->on('v.code', '=', 'ae.objet_traitement')
                     ->where('v.group_code', '=', 'AFFECTATION');
-
-                // Si chez vous objet_traitement contient le LABEL (et pas le code), utilisez plutôt :
-                // $join->on('v.label', '=', 'ae.objet_traitement')->where('v.group_code', '=', 'AFFECTATION');
+                // Si chez vous objet_traitement contient le LABEL -> utilisez la variante sur v.label
             })
-            // ↓ Joint t_intervention pour alimenter l’accordéon (marque/ville/cp/commentaire)
             ->leftJoin('t_intervention as ti', 'ti.NumInt', '=', 'ae.NumInt')
             ->selectRaw("
             ae.NumInt AS num_int,
             COALESCE(NULLIF(ae.contact_reel,''), '(contact inconnu)') AS client,
-            DATE(COALESCE(ae.tech_rdv_at, ae.rdv_prev_at)) AS date_prev,
-            TIME(COALESCE(ae.tech_rdv_at, ae.rdv_prev_at)) AS heure_prev,
+            DATE(ae.rdv_prev_at) AS date_prev,
+            TIME(ae.rdv_prev_at) AS heure_prev,
 
-            ae.tech_code,
             ae.reaffecte_code,
             ae.urgent,
 
-            -- drapeaux
-            CASE WHEN ae.reaffecte_code = ? OR ae.tech_code = ? THEN 1 ELSE 0 END AS concerne,
+            CASE WHEN ae.reaffecte_code = ? THEN 1 ELSE 0 END AS concerne,
 
-            -- À faire : code/label depuis vocab AFFECTATION
             v.code  AS a_faire_code,
             COALESCE(NULLIF(v.label,''), COALESCE(NULLIF(ae.objet_traitement,''), 'À préciser')) AS a_faire_label,
 
-            -- === Champs accordéon (provenant de t_intervention) ===
             ti.Marque AS marque,
             ti.VilleLivCli AS ville,
             ti.CPLivCli   AS cp,
-            CAST(ti.CommentInterne AS CHAR) AS commentaire,
+            ae.commentaire AS commentaire,
 
-            -- Ordre de priorité
             CASE
-              WHEN ae.urgent=1 AND (ae.reaffecte_code = ? OR ae.tech_code = ?) THEN 0
+              WHEN ae.urgent=1 AND ae.reaffecte_code = ? THEN 0
               WHEN ae.urgent=1 THEN 1
-              WHEN (ae.reaffecte_code = ? OR ae.tech_code = ?) THEN 2
+              WHEN ae.reaffecte_code = ? THEN 2
               ELSE 3
             END AS tier
-        ", [$codeSal,$codeSal, $codeSal,$codeSal, $codeSal,$codeSal])
-            ->where(function ($q) use ($agencesAutorisees) {
+        ", [$codeSal, $codeSal, $codeSal])
+            ->where(function ($qW) use ($agencesAutorisees) {
                 foreach ($agencesAutorisees as $i => $ag) {
                     if (!is_string($ag) || $ag==='') continue;
                     $method = $i===0 ? 'where' : 'orWhere';
-                    $q->{$method}('ae.NumInt', 'like', $ag.'%');
+                    $qW->{$method}('ae.NumInt', 'like', $ag.'%');
                 }
-            })
-            ->orderBy('tier','asc')
-            ->orderByRaw("COALESCE(ae.tech_rdv_at, ae.rdv_prev_at) IS NULL ASC")
-            ->orderByRaw("COALESCE(ae.tech_rdv_at, ae.rdv_prev_at) ASC")
+            });
+
+        // ---- (1) Filtre scope (urgent / me / both) ----
+        if ($scope) {
+            switch (strtolower($scope)) {
+                case 'urgent':
+                    $query->where('ae.urgent', 1);
+                    break;
+                case 'me':
+                    if ($codeSal !== null && $codeSal !== '') {
+                        $query->where('ae.reaffecte_code', $codeSal);
+                    } else {
+                        // pas de codesal -> aucun résultat "me"
+                        $query->whereRaw('1=0');
+                    }
+                    break;
+                case 'both':
+                    $query->where('ae.urgent', 1);
+                    if ($codeSal !== null && $codeSal !== '') {
+                        $query->where('ae.reaffecte_code', $codeSal);
+                    } else {
+                        $query->whereRaw('1=0');
+                    }
+                    break;
+            }
+        }
+
+        // ---- (2) Recherche mot-clé q ----
+        if ($q !== null && ($q = trim($q)) !== '') {
+            $like = '%'.str_replace(['%', '_'], ['\\%', '\\_'], $q).'%';
+            $query->where(function($w) use ($like){
+                $w->where('ae.NumInt', 'like', $like)
+                    ->orWhere('ae.contact_reel', 'like', $like)
+                    ->orWhere('v.label', 'like', $like)              // label du vocabulaire
+                    ->orWhere('ae.objet_traitement', 'like', $like); // fallback valeur brute
+            });
+        }
+
+        // Tri identique
+        $query->orderBy('tier','asc')
+            ->orderByRaw(" ae.rdv_prev_at IS NULL ASC")
+            ->orderByRaw(" ae.rdv_prev_at ASC")
             ->orderBy('ae.NumInt','ASC');
 
         return $query->paginate($perPage);
     }
+
 
 
 
@@ -107,12 +146,11 @@ class InterventionService
     ae.NumInt AS num_int,
     COALESCE(NULLIF(ae.contact_reel,''), '(contact inconnu)') AS client,
     COALESCE(NULLIF(ae.objet_traitement,''), 'À préciser') AS a_faire,
-    DATE(COALESCE(ae.tech_rdv_at, ae.rdv_prev_at)) AS date_prev,
-    TIME(COALESCE(ae.tech_rdv_at, ae.rdv_prev_at)) AS heure_prev,
-    ae.tech_code AS code_tech,
+    DATE(ae.rdv_prev_at) AS date_prev,
+    TIME(ae.rdv_prev_at) AS heure_prev,
     ae.reaffecte_code,
     ae.urgent AS urgent,
-    CASE WHEN ae.reaffecte_code = ? OR ae.tech_code = ? THEN 1 ELSE 0 END AS concerne
+    CASE WHEN ae.reaffecte_code = ? THEN 1 ELSE 0 END AS concerne
     ", [$codeSal, $codeSal])
     ->where(function ($q) use ($agencesAutorisees) {
     foreach ($agencesAutorisees as $i => $ag) {
@@ -123,8 +161,8 @@ class InterventionService
     })
     ->orderByDesc('concerne')
     ->orderByDesc('urgent')
-    ->orderByRaw("COALESCE(ae.tech_rdv_at, ae.rdv_prev_at) IS NULL ASC")
-    ->orderByRaw("COALESCE(ae.tech_rdv_at, ae.rdv_prev_at) ASC")
+    ->orderByRaw("ae.rdv_prev_at IS NULL ASC")
+    ->orderByRaw("ae.rdv_prev_at ASC")
     ->orderBy('ae.NumInt', 'ASC')
     ->limit($limit)
     ->get();

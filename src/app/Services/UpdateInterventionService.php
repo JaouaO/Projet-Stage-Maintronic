@@ -119,15 +119,21 @@ class UpdateInterventionService
                 'objet_traitement' => $messageAffectation,
                 'contact_reel'     => $dto->contactReel,
                 'urgent'           => $dto->urgent ? 1 : 0,
+                'commentaire'      => $dto->commentaire,
             ];
             if ($hasRdv && $dto->reaSal) {
                 $start = $this->clock->parseLocal($dto->date, $dto->heure);
-                $etat['rdv_prev_at']    = $start;
-                $etat['tech_rdv_at']    = $start;
+
                 if($dto->actionType ==='appel'){
                     $etat['reaffecte_code'] = $dto->reaSal;
+                    $etat['rdv_prev_at']    = $start;
+
                 }elseif ($dto->actionType ==='rdv_valide'){
                     $etat['tech_code']      = $dto->reaSal;
+                    $etat['tech_rdv_at']    = $start;
+                    $etat['reaffecte_code'] = null;
+                    $etat['rdv_prev_at']    = null;
+
                 }
             }
 
@@ -169,6 +175,68 @@ class UpdateInterventionService
 
 
     }
+    public function createMinimal(
+        string  $numInt,
+        ?string $marque        = null,
+        ?string $ville         = null,
+        ?string $cp            = null,
+        ?string $datePrev      = null,   // YYYY-MM-DD
+        ?string $heurePrev     = null,   // HH:MM
+        ?string $commentaire   = null,
+        ?string $auteur        = null,
+        bool    $urgent        = false,
+        ?string $reaffecteCode = null    // ex: le CodeSal de la personne concernée
+    ): void
+    {
+        $now = $this->clock->now(); // Europe/Paris déjà configuré dans ton service
+
+        DB::transaction(function () use (
+            $numInt, $marque, $ville, $cp, $datePrev, $heurePrev, $commentaire, $auteur, $urgent, $reaffecteCode, $now
+        ) {
+            // 1) t_intervention (insert si n’existe pas)
+            $ti = [
+                'NumInt'        => $numInt,
+                'Marque'        => $marque,
+                'VilleLivCli'   => $ville,
+                'CPLivCli'      => $cp,
+            ];
+            if ($datePrev && $heurePrev) {
+                $ti['DateIntPrevu']  = $datePrev;
+                $ti['HeureIntPrevu'] = $heurePrev;
+            }
+            DB::table('t_intervention')->updateOrInsert(['NumInt' => $numInt], array_filter($ti, fn($v)=>$v!==null));
+
+            // 2) t_actions_etat (snapshot initial)
+            $etat = [
+                'NumInt'           => $numInt,
+                'objet_traitement' => 'À préciser',   // valeur par défaut lisible dans ta liste
+                'urgent'           => $urgent ? 1 : 0,
+                'commentaire'      => $commentaire,
+                'reaffecte_code'   => $reaffecteCode,
+                'bits_traitement'  => '0000000000000',
+                'bits_affectation' => '00000000',
+            ];
+
+            // rdv_prev_at si date/heure saisies
+            if ($datePrev && $heurePrev) {
+                $start = $this->clock->parseLocal($datePrev, $heurePrev);
+                $etat['rdv_prev_at'] = $start;
+            }
+
+            DB::table('t_actions_etat')->updateOrInsert(['NumInt' => $numInt], array_filter($etat, fn($v)=>$v!==null));
+
+            // 3) Historique
+            $evtMeta = $this->vocabService->pruneNulls([
+                'd'   => $datePrev ?: null,
+                'h'   => $heurePrev ?: null,
+                'lab' => mb_substr((string)$commentaire, 0, 60) ?: null,
+                'urg' => $urgent ? 1 : null,
+                't'   => $reaffecteCode ?: null,
+            ]);
+            $this->historyWriteService->log($numInt, 'CREATED', $evtMeta, 'Création', (string)$commentaire, (string)$auteur);
+        });
+    }
+
 
 
 }
