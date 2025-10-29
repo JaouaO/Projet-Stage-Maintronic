@@ -29,19 +29,42 @@ class InterventionService
         int     $perPage = 25,
         array   $agencesAutorisees = [],
         ?string $codeSal = null,
-        ?string $q = null,           // ← NEW
-        ?string $scope = null        // ← NEW: 'urgent' | 'me' | 'both'
+        ?string $q = null,
+        ?string $scope = null
     ): LengthAwarePaginator
     {
-        if (empty($agencesAutorisees)) {
+        // --- garde accès : agences
+        $agences = array_values(array_unique(
+            array_filter(array_map(function ($ag) {
+                // normalise et whiteliste (ex : M34M, DOAG…)
+                $ag = strtoupper(trim((string)$ag));
+                return preg_match('/^[A-Z0-9_-]{2,8}$/', $ag) ? $ag : null;
+            }, (array)$agencesAutorisees))
+        ));
+        if (empty($agences)) {
             return new LengthAwarePaginator(collect(), 0, $perPage);
+        }
+
+        // --- garde scope : si 'me' / 'both' mais codeSal absent → vide
+        $scopeNorm = $scope ? strtolower($scope) : null;
+        if (in_array($scopeNorm, ['me','both'], true) && empty($codeSal)) {
+            return new LengthAwarePaginator(collect(), 0, $perPage);
+        }
+
+        // --- sanitisation "q" défensive (la FormRequest l’a déjà fait, mais on double ici)
+        $q = is_string($q) ? trim($q) : null;
+        if ($q !== null) {
+            // enlève contrôles, borne à 120, retire < >
+            $q = preg_replace('/[\x00-\x1F\x7F]/u', '', $q);
+            $q = str_replace(['<','>'], '', $q);
+            $q = mb_substr($q, 0, 120);
+            if ($q === '') $q = null;
         }
 
         $query = DB::table('t_actions_etat as ae')
             ->leftJoin('t_actions_vocabulaire as v', function ($join) {
                 $join->on('v.code', '=', 'ae.objet_traitement')
                     ->where('v.group_code', '=', 'AFFECTATION');
-                // Si chez vous objet_traitement contient le LABEL -> utilisez la variante sur v.label
             })
             ->leftJoin('t_intervention as ti', 'ti.NumInt', '=', 'ae.NumInt')
             ->selectRaw("
@@ -69,60 +92,51 @@ class InterventionService
               WHEN ae.reaffecte_code = ? THEN 2
               ELSE 3
             END AS tier
-        ", [$codeSal, $codeSal, $codeSal])
-            ->where(function ($qW) use ($agencesAutorisees) {
-                foreach ($agencesAutorisees as $i => $ag) {
-                    if (!is_string($ag) || $ag === '') continue;
-                    $method = $i === 0 ? 'where' : 'orWhere';
-                    $qW->{$method}('ae.NumInt', 'like', $ag . '%');
-                }
-            });
+        ", [$codeSal, $codeSal, $codeSal]);
 
-        // ---- (1) Filtre scope (urgent / me / both) ----
-        if ($scope) {
-            switch (strtolower($scope)) {
-                case 'urgent':
-                    $query->where('ae.urgent', 1);
-                    break;
-                case 'me':
-                    if ($codeSal !== null && $codeSal !== '') {
-                        $query->where('ae.reaffecte_code', $codeSal);
-                    } else {
-                        // pas de codesal -> aucun résultat "me"
-                        $query->whereRaw('1=0');
-                    }
-                    break;
-                case 'both':
-                    $query->where('ae.urgent', 1);
-                    if ($codeSal !== null && $codeSal !== '') {
-                        $query->where('ae.reaffecte_code', $codeSal);
-                    } else {
-                        $query->whereRaw('1=0');
-                    }
-                    break;
+        // --- Filtre agences (par préfixe de NumInt)
+        $query->where(function ($qW) use ($agences) {
+            foreach ($agences as $i => $ag) {
+                $pattern = $ag.'%'; // bindé
+                if ($i === 0) {
+                    $qW->where('ae.NumInt', 'like', $pattern);
+                } else {
+                    $qW->orWhere('ae.NumInt', 'like', $pattern);
+                }
             }
+        });
+
+        // --- Scope
+        if ($scopeNorm === 'urgent') {
+            $query->where('ae.urgent', 1);
+        } elseif ($scopeNorm === 'me') {
+            $query->where('ae.reaffecte_code', $codeSal);
+        } elseif ($scopeNorm === 'both') {
+            $query->where('ae.urgent', 1)
+                ->where('ae.reaffecte_code', $codeSal);
         }
 
-        // ---- (2) Recherche mot-clé q ----
-        if ($q !== null && ($q = trim($q)) !== '') {
-            $like = '%' . str_replace(['%', '_'], ['\\%', '\\_'], $q) . '%';
+        // --- Recherche q (LIKE échappé)
+        if ($q !== null) {
+            // échappe \ puis % et _
+            $safe = str_replace(['\\','%','_'], ['\\\\','\\%','\\_'], $q);
+            $like = "%{$safe}%";
             $query->where(function ($w) use ($like) {
                 $w->where('ae.NumInt', 'like', $like)
                     ->orWhere('ae.contact_reel', 'like', $like)
-                    ->orWhere('v.label', 'like', $like)              // label du vocabulaire
-                    ->orWhere('ae.objet_traitement', 'like', $like); // fallback valeur brute
+                    ->orWhere('v.label', 'like', $like)
+                    ->orWhere('ae.objet_traitement', 'like', $like);
             });
         }
 
-        // Tri identique
+        // --- Tri : priorité (tier) puis rdv, puis NumInt
         $query->orderBy('tier', 'asc')
-            ->orderByRaw(" ae.rdv_prev_at IS NULL ASC")
-            ->orderByRaw(" ae.rdv_prev_at ASC")
-            ->orderBy('ae.NumInt', 'ASC');
+            ->orderByRaw("ae.rdv_prev_at IS NULL ASC")
+            ->orderBy('ae.rdv_prev_at', 'asc')
+            ->orderBy('ae.NumInt', 'asc');
 
         return $query->paginate($perPage);
     }
-
 
     /**
      * Variante non paginée (même logique de filtre/tri) si besoin ailleurs.
@@ -223,5 +237,6 @@ class InterventionService
         $seqStr = str_pad((string)$seq, 5, '0', STR_PAD_LEFT);
         return $prefix.$seqStr;
     }
+
 
 }

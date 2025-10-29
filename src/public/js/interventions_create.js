@@ -1,96 +1,129 @@
 // public/js/interventions_create.js
 (() => {
     const $ = (s, ctx) => (ctx || document).querySelector(s);
+    const ready = (fn) => (document.readyState === 'loading'
+        ? document.addEventListener('DOMContentLoaded', fn)
+        : fn());
 
-    function ready(fn) {
-        if (document.readyState === "loading") {
-            document.addEventListener("DOMContentLoaded", fn);
-        } else {
-            fn();
-        }
-    }
-
-    // Récupère l'URL de suggestion depuis:
-    // 1) <meta name="suggest-endpoint">
-    // 2) window.CREATE_INTERVENTION_SUGGEST_URL
-    // 3) data-suggest sur la balise <script src="...">
     function getSuggestUrl() {
         const meta = document.querySelector('meta[name="suggest-endpoint"]')?.content;
         if (meta) return meta;
-
-        if (typeof window.CREATE_INTERVENTION_SUGGEST_URL === "string" && window.CREATE_INTERVENTION_SUGGEST_URL.length > 0) {
+        if (typeof window.CREATE_INTERVENTION_SUGGEST_URL === 'string' && window.CREATE_INTERVENTION_SUGGEST_URL.length) {
             return window.CREATE_INTERVENTION_SUGGEST_URL;
         }
-
-        // cherche le script courant pour lire data-suggest (au cas où)
         const scripts = document.querySelectorAll('script[src*="interventions_create.js"]');
         for (const s of scripts) {
-            const ds = s.getAttribute("data-suggest");
+            const ds = s.getAttribute('data-suggest');
             if (ds) return ds;
         }
-        return ""; // rien trouvé
+        return '';
+    }
+
+    // Petit helper visuel "chargement"
+    function setLoading(el, on) {
+        if (!el) return;
+        el.toggleAttribute('data-loading', !!on);
     }
 
     ready(() => {
-        const agenceSel = $("#Agence");
-        const dateInput = $("#DateIntPrevu");
-        const numField  = $("#NumInt");
+        const form   = $('#createForm');
+        const agence = $('#Agence');
+        const date   = $('#DateIntPrevu');
+        const num    = $('#NumInt');
+        const urgent = $('#Urgent');
+        const submit = form?.querySelector('button[type="submit"]');
 
-        if (!agenceSel || !numField) return;
+        if (!form || !agence || !num) return;
 
         const suggestEndpoint = getSuggestUrl();
-        if (!suggestEndpoint) {
-            // Pas d'URL: on sort silencieusement
-            return;
+        if (!suggestEndpoint) return;
+
+        // ——— Sécurité client légère (ne remplace pas la validation serveur)
+        const cp = $('#CPLivCli');
+        if (cp) {
+            cp.addEventListener('input', () => {
+                let v = cp.value.replace(/[^\dA-Za-z\- ]+/g, '');
+                if (v.length > 10) v = v.slice(0, 10);
+                cp.value = v;
+            });
         }
 
+        const ville = $('#VilleLivCli');
+        if (ville) {
+            ville.addEventListener('input', () => {
+                let v = ville.value.replace(/[\x00-\x1F\x7F<>]/g, '');
+                if (v.length > 80) v = v.slice(0, 80);
+                ville.value = v;
+            });
+        }
+
+        const marque = $('#Marque');
+        if (marque) {
+            marque.addEventListener('input', () => {
+                let v = marque.value.replace(/[\x00-\x1F\x7F<>]/g, '');
+                if (v.length > 80) v = v.slice(0, 80);
+                marque.value = v;
+            });
+        }
+
+        // ——— Suggest NumInt (debounce + anti-course + AbortController)
         let aborter = null;
         let debounceTimer = null;
-        let reqSeq = 0; // anti course
+        let seq = 0;
 
-        const refreshNum = () => {
-            const ag = agenceSel.value;
-            const d  = dateInput ? dateInput.value : "";
-
+        function refreshNum() {
+            const ag = agence.value;
+            const d  = date?.value || '';
             if (!ag) return;
 
-            // Annule la requête précédente si en cours
             if (aborter) aborter.abort();
             aborter = new AbortController();
 
-            const seq = ++reqSeq;
+            const mySeq = ++seq;
             const url = new URL(suggestEndpoint, window.location.origin);
-            url.searchParams.set("agence", ag);
-            if (d) url.searchParams.set("date", d);
+            url.searchParams.set('agence', ag);
+            if (d) url.searchParams.set('date', d);
 
+            setLoading(num, true);
             fetch(url.toString(), {
-                headers: { "X-Requested-With": "XMLHttpRequest" },
-                signal: aborter.signal
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                signal: aborter.signal,
+                credentials: 'same-origin'
             })
-                .then(r => (r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status))))
+                .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP '+r.status)))
                 .then(js => {
-                    if (seq !== reqSeq) return;              // une requête plus récente a répondu
-                    if (js && js.ok && js.numInt && numField) {
-                        numField.value = js.numInt;
-                    }
+                    if (mySeq !== seq) return;
+                    if (js && js.ok && js.numInt) num.value = js.numInt;
                 })
-                .catch(err => {
-                    if (err.name === "AbortError") return;   // normal
-                    // Silencieux: ne bloque pas le flux utilisateur
-                    // console.warn("Suggest error", err);
-                });
-        };
-
-        const debounced = () => {
-            clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(refreshNum, 150);
-        };
-
-        // Écoutes: change sur agence et date + input pour saisir rapidement la date
-        agenceSel.addEventListener("change", debounced);
-        if (dateInput) {
-            dateInput.addEventListener("change", debounced);
-            dateInput.addEventListener("input", debounced);
+                .catch(err => { if (err.name !== 'AbortError') {/* silencieux */} })
+                .finally(() => setLoading(num, false));
         }
+
+        function debouncedRefresh() {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(refreshNum, 180);
+        }
+
+        agence.addEventListener('change', debouncedRefresh);
+        date?.addEventListener('change', debouncedRefresh);
+        date?.addEventListener('input',  debouncedRefresh);
+
+        // ——— Double-submit guard + vérifs croisées simples
+        form.addEventListener('submit', (e) => {
+            if (submit?.disabled) { e.preventDefault(); return; }
+            // Règle UX : si l’un des deux (date, heure) est rempli → forcer l’autre
+            const d = $('#DateIntPrevu')?.value || '';
+            const h = $('#HeureIntPrevu')?.value || '';
+            if ((d && !h) || (!d && h)) {
+                e.preventDefault();
+                alert('Veuillez saisir à la fois la date et l’heure prévues, ou laisser les deux vides.');
+                return;
+            }
+            submit && (submit.disabled = true);
+            setTimeout(() => { submit && (submit.disabled = false); }, 5000); // sécurité
+        });
+
+        // Premier suggest (au chargement)
+        debouncedRefresh();
     });
 })();

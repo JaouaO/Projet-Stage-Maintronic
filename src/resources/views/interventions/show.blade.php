@@ -8,7 +8,25 @@
     <div class="app">
         <div class="header b-header">
             <h1>Interventions</h1>
+
+            <a class="btn-logout"
+               href="{{ route('deconnexion') }}"
+               title="Déconnexion">
+                <span class="ico">↪</span> Déconnexion
+            </a>
         </div>
+
+
+        @if ($errors->any())
+            <div class="alert alert-danger" role="alert">
+                <ul style="margin:0;padding-left:18px">
+                    @foreach ($errors->all() as $error)
+                        <li>{{ $error }}</li> {{-- échappé par Blade --}}
+                    @endforeach
+                </ul>
+            </div>
+        @endif
+
 
         <div class="b-subbar">
             {{-- FORMULAIRE UNIQUE : recherche + filtres + per-page --}}
@@ -18,12 +36,21 @@
 
                 {{-- Recherche --}}
                 <div class="b-search">
-                    <input type="search" id="q" name="q" value="{{ $q }}"
-                           placeholder="Rechercher un n°, un client, un libellé “à faire”…">
-                    @if(!empty($q))
+                    <input
+                        type="search"
+                        id="q"
+                        name="q"
+                        value="{{ old('q', $q) }}"
+                        class="{{ $errors->has('q') ? 'is-invalid' : '' }}"
+                        placeholder="Rechercher un n°, un client, un libellé “à faire”…">
+                    @if(!empty(old('q', $q)))
                         <button type="button" class="b-clear" title="Effacer">✕</button>
                     @endif
+                    @error('q')
+                    <p class="form-error">{{ $message }}</p>
+                    @enderror
                 </div>
+
 
                 {{-- Filtres (chips cliquables) --}}
                 @php $scope = $scope ?? ''; @endphp

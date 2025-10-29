@@ -184,3 +184,24 @@ td.col-flags .flags{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .table col.colw-todo   { width: var(--w-todo); }     /* 12% → 24% */
 .table col.colw-flags  { width: var(--w-flags); }    /* 14% → 10% */
 .table col.colw-act    { width: var(--w-actions); }  /* 28% → 20% */
+
+.is-invalid { border-color:#d33; outline-color:#d33 }
+.form-error { color:#b21; font-size:12px; margin-top:4px }
+.alert.alert-danger { background:#fde8e8; border:1px solid #f5b5b5; padding:8px 12px; border-radius:6px }
+
+
+.b-header{
+    display:flex; align-items:center; justify-content:space-between;
+    gap:12px;
+}
+.btn-logout{
+    display:inline-flex; align-items:center; gap:8px;
+    padding:8px 12px; border-radius:10px; text-decoration:none;
+    border:1px solid var(--line); background:#f7f7f9; color:var(--ink);
+    box-shadow:0 1px 0 rgba(0,0,0,.02);
+    transition:background .15s ease, box-shadow .15s ease, transform .06s ease;
+    font-weight:600;
+}
+.btn-logout:hover{ background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.06) }
+.btn-logout:active{ transform:translateY(1px) }
+.btn-logout .ico{ font-size:14px; line-height:1 }

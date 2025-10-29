@@ -3,6 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\NotBlankRequest;
+use App\Http\Requests\ShowInterventionsRequest;
+use App\Http\Requests\StoreInterventionRequest;
+use App\Http\Requests\SuggestNumIntRequest;
 use App\Http\Requests\UpdateInterventionRequest;
 use App\Services\AccessInterventionService;
 use App\Services\DTO\RdvTemporaireDTO;
@@ -59,8 +62,7 @@ class MainController extends Controller
     public function showLoginForm()
     {
         if (session()->has('id')) {
-            return redirect()->route('accueil', ['id' => session('id')]);
-        }
+            return redirect()->route('interventions.show', ['id' => session('id')]);        }
         return view('login');
     }
 
@@ -86,70 +88,49 @@ class MainController extends Controller
 
         if ($result['success']) {
             $this->authService->logAccess($id, $ip, $codeSal, $login['user']['CodeAgSal']);
-            return redirect()->route('accueil', ['id' => $id]);
+            return redirect()->route('interventions.show', ['id' => session('id')]);
         }
 
         return redirect()->route('erreur')->with('message', $result['message']);
     }
 
-    public function accueil(NotBlankRequest $request)
+    public function showInterventions(ShowInterventionsRequest $request)
     {
-        $numints = DB::table('t_intervention')
-            ->orderByDesc('DateIntPrevu')
-            ->orderByDesc('HeureIntPrevu')
-            ->whereNull('CodeTech')
-            ->limit(500)
-            ->pluck('NumInt');
-
-        return view('accueil', compact('numints'));
-    }
-
-    // MainController@showInterventions
-    public function showInterventions(Request $request)
-    {
-
-        Log::info('[PING] updateAndPlanRdv atteint');
-        $perPage = (int)$request->query('per_page', 10);
-        if (!in_array($perPage, [10, 25, 50, 100], true)) $perPage = 10;
-        $q      = $request->query('q');            // ← NEW
-        $scope  = $request->query('scope');        // ← NEW
+        $v = $request->validated();
+        $perPage = (int)($v['per_page'] ?? 10);
+        $q       = $v['q'] ?? null;
+        $scope   = $v['scope'] ?? null;
 
         $agencesAutorisees = (array) session('agences_autorisees', []);
         $codeSal           = (string) session('codeSal', '');
 
-        $rows = $this->interventionService->listPaginatedSimple($perPage, $agencesAutorisees, $codeSal, $q, $scope);
-        $todoTagClass = [
-            // On garde vos classes de couleurs si vous voulez réutiliser l’affichage des tags.
-            'CONFIRMER_RDV' => 'blue',
-            'PLANIFIER_RDV' => 'amber',
-            'CLOTURER'      => 'green',
-            'DIAGNOSTIC'    => 'violet',
-        ];
+        $rows = $this->interventionService
+            ->listPaginatedSimple($perPage, $agencesAutorisees, $codeSal, $q, $scope);
 
-        return view('interventions.show', [
-            'rows'         => $rows,
-            'todoTagClass' => $todoTagClass,
-            'perPage'      => $perPage,
-            'q'            => $q,       // ← NEW
-            'scope'        => $scope,   // ← NEW
-        ]);
-
+        return view('interventions.show', compact('rows','perPage','q','scope'));
     }
+
+
+    // GET /interventions/{numInt}/history
     public function history(Request $request, string $numInt): \Illuminate\Http\Response
     {
-        // Récupération à la demande (service dédié)
+        // Garde d’accès par agence (préfixe du NumInt)
+        $agencesAutorisees = array_map('strtoupper', (array) $request->session()->get('agences_autorisees', []));
+        $agFromNum         = $this->accessInterventionService->agenceFromNumInt($numInt);
+
+        if ($agFromNum === '' || !in_array($agFromNum, $agencesAutorisees, true)) {
+            abort(403, 'Vous n’avez pas accès à cette intervention.');
+        }
+
         $suivis = $this->historyService->fetchHistory($numInt);
 
-        // Si tu préfères renvoyer une page HTML autonome (parfait pour window.open)
-        // crée la vue resources/views/interventions/history_popup.blade.php
-        if (View::exists('interventions.history_popup')) {
+        if (\Illuminate\Support\Facades\View::exists('interventions.history_popup')) {
             return response()->view('interventions.history_popup', [
                 'numInt' => $numInt,
                 'suivis' => $suivis,
             ]);
         }
 
-        // Fallback minimal (au cas où la vue n’est pas encore créée)
         return response()->view('interventions.history_fallback', [
             'numInt' => $numInt,
             'suivis' => $suivis,
@@ -158,28 +139,12 @@ class MainController extends Controller
 
 
 
-    public function entree(NotBlankRequest $request)
-    {
-        $idFromUrl = $request->query('id');
-        $sessionId = session('id');
-        if (!$sessionId || $idFromUrl !== $sessionId) {
-            return redirect()->route('authentification')->with('message', 'Session invalide.');
-        }
-
-        $validated = $request->validate([
-            'num_int' => ['required', 'regex:/^[A-Za-z0-9_-]+$/', 'exists:t_intervention,NumInt'],
-            'agence' => ['required', 'regex:/^[A-Za-z0-9_-]+$/'],
-        ]);
-
-        return redirect()->route('interv.edit', ['numInt' => $validated['num_int']]);
-    }
-
     public function editIntervention($numInt)
     {
         $payload = $this->traitementDossierService->loadEditPayload($numInt);
         if (!$payload['interv']) {
             return redirect()
-                ->route('accueil', ['id' => session('id')])
+                ->route('interventions.show', ['id' => session('id')])
                 ->with('error', 'Intervention introuvable.');
         }
 
@@ -362,87 +327,55 @@ class MainController extends Controller
         ]);
     }
 
-    public function suggestNumInt(Request $request): \Illuminate\Http\JsonResponse
+    public function suggestNumInt(SuggestNumIntRequest $request)
     {
-        $agencesAutorisees = (array) $request->session()->get('agences_autorisees', []);
-        if (empty($agencesAutorisees)) {
-            return response()->json(['ok' => false, 'msg' => 'Aucune agence autorisée'], 403);
-        }
+        $ag = $request->validated()['agence'];
+        // Suggestion : AGxxx-<N+1> basé sur le max existant
+        $max = DB::table('t_intervention')
+            ->where('NumInt', 'like', $ag.'-%')
+            ->selectRaw("MAX(CAST(SUBSTRING_INDEX(NumInt, '-', -1) AS UNSIGNED)) as m")
+            ->value('m');
 
-        // 1) Choix de l’agence
-        $agence = (string) $request->query('agence', '');
-        if ($agence === '') {
-            $agence = (string) $request->session()->get('defaultAgence', '');
-            if ($agence === '' || !in_array($agence, $agencesAutorisees, true)) {
-                $sorted = $agencesAutorisees; sort($sorted, SORT_NATURAL|SORT_FLAG_CASE);
-                $agence = (string) ($sorted[0] ?? '');
-            }
-        }
-        if ($agence === '' || !in_array($agence, $agencesAutorisees, true)) {
-            return response()->json(['ok' => false, 'msg' => 'Agence non autorisée'], 403);
-        }
-
-        // 2) Date (optionnelle)
-        $dateStr = (string) $request->query('date', '');
-        $date = $dateStr
-            ? $this->clockService->parseLocal($dateStr, '00:00')
-            : $this->clockService->now();
-
-        // 3) Numéro auto
-        try {
-            $num = $this->interventionService->nextNumInt($agence, $date);
-            return response()->json(['ok' => true, 'numInt' => $num, 'agence' => $agence]);
-        } catch (\Throwable $e) {
-            return response()->json(['ok' => false, 'msg' => $e->getMessage()], 500);
-        }
+        $next = (int)$max + 1;
+        return response()->json(['ok' => true, 'numInt' => sprintf('%s-%d', $ag, $next ?: 1)]);
     }
 
-    public function storeIntervention(Request $request): \Illuminate\Http\RedirectResponse
+    public function storeIntervention(StoreInterventionRequest $request): \Illuminate\Http\RedirectResponse
     {
-        $data = $request->validate([
-            'Agence'        => ['required','regex:/^[A-Za-z0-9_-]{3,6}$/'],
-            'NumInt'        => ['nullable','regex:/^[A-Za-z0-9_-]+$/','unique:t_intervention,NumInt'],
-            'Marque'        => ['nullable','string','max:60'],
-            'VilleLivCli'   => ['nullable','string','max:80'],
-            'CPLivCli'      => ['nullable','string','max:10'],
-            'DateIntPrevu'  => ['nullable','date'],
-            'HeureIntPrevu' => ['nullable','date_format:H:i'],
-            'Commentaire'   => ['nullable','string','max:1000'],
-            'Urgent'        => ['nullable','boolean'],
-            'Concerne'      => ['nullable','boolean'],
-        ]);
+        // Données déjà nettoyées + validées par la FormRequest
+        $p = $request->validated();
 
-        $agencesAutorisees = (array) $request->session()->get('agences_autorisees', []);
-        if (!in_array($data['Agence'], $agencesAutorisees, true)) {
-            return back()->withErrors(['Agence' => 'Agence non autorisée'])->withInput();
-        }
-
-        // Date de référence pour le YYMM du NumInt
-        $dateRef = !empty($data['DateIntPrevu'])
-            ? $this->clockService->parseLocal($data['DateIntPrevu'], '00:00') // ← clock
+        // Date de référence pour le YYMM du NumInt (si jamais vide en entrée — garde-fou)
+        $dateRef = !empty($p['DateIntPrevu'])
+            ? $this->clockService->parseLocal($p['DateIntPrevu'], '00:00')
             : $this->clockService->now();
 
-        $numInt = !empty($data['NumInt'])
-            ? $data['NumInt']
-            : $this->interventionService->nextNumInt($data['Agence'], $dateRef);
+        // NumInt : en principe requis par la FormRequest ; fallback si champ finalement vide
+        $numInt = !empty($p['NumInt'])
+            ? $p['NumInt']
+            : $this->interventionService->nextNumInt($p['Agence'], $dateRef);
 
         $codeSal = (string) $request->session()->get('codeSal', '');
-        $reaff   = !empty($data['Concerne']) ? ($codeSal ?: null) : null;
 
+        // IMPORTANT : createMinimal doit écrire :
+        // - t_intervention : NumInt, Marque, VilleLivCli, CPLivCli (uniquement colonnes existantes)
+        // - t_actions_etat : urgent, rdv_prev_at (composé de DateIntPrevu+HeureIntPrevu), commentaire, reaffecte_code…
         $this->updateInterventionService->createMinimal(
             $numInt,
-            $data['Marque'] ?? null,
-            $data['VilleLivCli'] ?? null,
-            $data['CPLivCli'] ?? null,
-            $data['DateIntPrevu'] ?? null,
-            $data['HeureIntPrevu'] ?? null,
-            $data['Commentaire'] ?? null,
+            $p['Marque']        ?? null,
+            $p['VilleLivCli']   ?? null,
+            $p['CPLivCli']      ?? null,
+            $p['DateIntPrevu']  ?? null,
+            $p['HeureIntPrevu'] ?? null,
+            $p['Commentaire']   ?? null,
             $codeSal ?: 'system',
-            !empty($data['Urgent']),
-            $reaff
+            ((string)($p['Urgent'] ?? '0') === '1'),
+            null
         );
 
-        return redirect()->route('interventions.edit', $numInt)->with('ok', 'Intervention créée.');
+        return redirect()
+            ->route('interventions.edit', $numInt)
+            ->with('ok', 'Intervention créée.');
     }
 
 //return redirect('/ClientInfo?id=' . session('user')->idUser . '&action=dossier-detail&numInt=' . $numInt);

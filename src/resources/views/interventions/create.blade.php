@@ -5,6 +5,17 @@
     <link rel="stylesheet" href="{{ asset('css/interventions.css') }}">
     <link rel="stylesheet" href="{{ asset('css/interventions_create.css') }}">
     <meta name="suggest-endpoint" content="{{ route('interventions.suggest') }}">
+
+    @if ($errors->any())
+        <div class="alert alert-danger" role="alert">
+            <ul style="margin:0;padding-left:18px">
+                @foreach ($errors->all() as $error)
+                    <li>{{ $error }}</li>
+                @endforeach
+            </ul>
+        </div>
+    @endif
+
     <div id="CreateIntervPage" class="app new-interv">
         <div class="header b-header">
             <h1>Nouvelle intervention</h1>

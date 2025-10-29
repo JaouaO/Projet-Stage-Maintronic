@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\DB;
 
 class AccessInterventionService
 {
-    private function agenceFromNumInt(string $numInt): string
+    public function agenceFromNumInt(string $numInt): string
     {
         $base = explode('-', $numInt, 2)[0] ?? '';
         return mb_substr($base, 0, 4);
