@@ -28,7 +28,7 @@ WORKDIR /var/www/html
 
 # ⚠️ IMPORTANT : on copie d’abord tout le code, PUIS on installe
 COPY ./src/ /var/www/html/
-
+RUN ls -la /var/www/html/public
 # Dépendances Composer (une seule fois)
 RUN composer install --no-dev --prefer-dist --optimize-autoloader
 
