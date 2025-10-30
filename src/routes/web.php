@@ -29,7 +29,7 @@ Route::get('/deconnexion', function () {
 
 
 // Contraintes de paramètres
-$NUMINT_RE    = '^(?!nouvelle$)[A-Za-z0-9_-]+$';   // tout sauf exactement "nouvelle"
+$NUMINT_RE = '^(?!(nouvelle|suggest-num)$)[A-Za-z0-9_-]+$';
 $CODETECH_RE  = '^[A-Za-z0-9_-]{2,10}$';
 
 // Groupe protégé : session + headers sécurité

@@ -1,6 +1,8 @@
 <?php
+
 namespace App\Services;
 
+use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -61,7 +63,7 @@ class AccessInterventionService
         $qExtDoag = DB::table('t_salarie as s')
             ->selectRaw("s.CodeSal, s.NomSal, s.CodeAgSal, 'externe' as access_level")
             ->where($notObsolete)
-            ->when($startMC, fn ($q) => $q->where('s.CodeAgSal', 'DOAG'), fn ($q) => $q->whereRaw('0=1'));
+            ->when($startMC, fn($q) => $q->where('s.CodeAgSal', 'DOAG'), fn($q) => $q->whereRaw('0=1'));
 
         // (iii) Tous les ADMI
         $qExtAdmi = DB::table('t_salarie as s')
@@ -88,8 +90,84 @@ class AccessInterventionService
         return collect($rows)
             ->groupBy('CodeSal')
             ->map(function ($grp) use ($priority) {
-                return $grp->sortByDesc(fn ($r) => $priority[$r->access_level] ?? 0)->first();
+                return $grp->sortByDesc(fn($r) => $priority[$r->access_level] ?? 0)->first();
             })
             ->values();
     }
+
+    public function listAgendaPeopleForNumInt(string $numInt, ?Carbon $from = null, ?Carbon $to = null): Collection
+    {
+        $ag    = $this->agenceFromNumInt($numInt);         // ← agence du dossier
+        $base  = $this->listPeopleForNumInt($numInt);      // accès autorisé (interne/direction/externe)
+        if ($base->isEmpty()) return collect();
+
+        // Normalisation des codes (TRIM + UPPER) pour éviter FABE vs "FABE "
+        $codes = $base->pluck('CodeSal')->map(fn($c)=>strtoupper(trim((string)$c)))->all();
+
+        // Fenêtre par défaut : aujourd’hui -> +60 jours
+        $from = $from ?: Carbon::now('Europe/Paris')->startOfDay();
+        $to   = $to   ?: (clone $from)->addDays(60)->endOfDay();
+
+        // RDV "dans la fenêtre" (toutes agences)
+        $rdvAny = DB::table('t_planning_technicien as p')
+            ->selectRaw('UPPER(TRIM(p.CodeTech)) as c')
+            ->whereBetween('p.StartDate', [$from->toDateString(), $to->toDateString()])
+            ->whereIn(DB::raw('UPPER(TRIM(p.CodeTech))'), $codes)
+            ->distinct()
+            ->pluck('c')
+            ->flip();   // Set: code => true
+
+        // RDV "même agence que le dossier" (M31T-xxxx)
+        $rdvSameAg = DB::table('t_planning_technicien as p')
+            ->selectRaw('UPPER(TRIM(p.CodeTech)) as c')
+            ->whereBetween('p.StartDate', [$from->toDateString(), $to->toDateString()])
+            ->where('p.NumIntRef', 'like', $ag.'-%')
+            ->whereIn(DB::raw('UPPER(TRIM(p.CodeTech))'), $codes)
+            ->distinct()
+            ->pluck('c')
+            ->flip();
+
+        // Flags TECH
+        $techFlags = DB::table('t_salarie as s')
+            ->selectRaw("UPPER(TRIM(s.CodeSal)) as c, CASE WHEN UPPER(s.fonction) IN ('TECH','TECHNICIEN') THEN 1 ELSE 0 END as tech_score")
+            ->whereIn(DB::raw('UPPER(TRIM(s.CodeSal))'), $codes)
+            ->get()
+            ->keyBy('c');
+
+        // Règle finale :
+        //  - garde si TECH
+        //  - OU (access_level ∈ {interne,direction} ET hasRdvAny)
+        //  - OU hasRdvSameAgency (quel que soit access_level)
+        return $base->map(function ($p) use ($techFlags, $rdvAny, $rdvSameAg) {
+            $code = strtoupper(trim((string)$p->CodeSal));
+            $isTech = (int)($techFlags[$code]->tech_score ?? 0) > 0;
+            $hasAny = $rdvAny->has($code);
+            $hasAg  = $rdvSameAg->has($code);
+
+            $keep = $isTech
+                || (in_array($p->access_level, ['interne','direction'], true) && $hasAny)
+                || $hasAg;
+
+            if (!$keep) return null;
+
+            return (object)[
+                'CodeSal'      => $p->CodeSal,
+                'NomSal'       => $p->NomSal,
+                'CodeAgSal'    => $p->CodeAgSal,
+                'access_level' => $p->access_level,
+                'is_tech'      => $isTech,
+                'has_rdv'      => $hasAny,
+                'has_rdv_ag'   => $hasAg, // debug/help
+            ];
+        })
+            ->filter()
+            // tri : TECH (0) > direction (1) > interne (2) > reste (3), puis Nom
+            ->sort(function ($a, $b) {
+                $rank = fn($x) => $x->is_tech ? 0 : ($x->access_level === 'direction' ? 1 : ($x->access_level === 'interne' ? 2 : 3));
+                $ra = $rank($a); $rb = $rank($b);
+                return ($ra === $rb) ? strcasecmp($a->NomSal ?? '', $b->NomSal ?? '') : ($ra <=> $rb);
+            })
+            ->values();
+    }
+
 }

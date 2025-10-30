@@ -6,16 +6,18 @@
     <div class="body">
         {{-- Sélecteur de technicien --}}
         <div class="grid2">
-            <label>Technicien</label>
+            <label>Technicien(nes)</label>
             <select id="selModeTech">
-                <option value="_ALL" selected>Tous les techniciens</option>
-                @foreach($techniciens as $technicien)
-                    <option value="{{ $technicien->CodeSal }}">
-                        {{ $technicien->NomSal }} ({{ $technicien->CodeSal }})
+                <option value="_ALL" selected>Toutes (filtrées)</option>
+                @foreach($agendaPeople as $p)
+                    <option value="{{ $p->CodeSal }}">
+                        {{ $p->NomSal }} ({{ $p->CodeSal }})
+                        {{ $p->is_tech ? '' : ' — ' . e($p->access_level) }}
                     </option>
                 @endforeach
             </select>
         </div>
+
 
         <div id="calWrap">
             <div id="calHead">

@@ -213,7 +213,7 @@
         </div>
 
         <div class="footer">
-            <div class="meta">Priorité serveur : (URGENT & VOUS) → URGENT → VOUS → Autre, puis date/heure. Cliquez les en-têtes pour trier côté navigateur.</div>
+            <div class="meta">Priorité serveur : (URGENT & VOUS) → URGENT → VOUS → Autre, puis date/heure.</div>
             <div class="ft-actions">
                 <a class="btn" href="{{ route('interventions.create') }}">➕ Nouvelle intervention</a>
                 <a class="btn" href="{{ url()->previous() }}">Retour</a>

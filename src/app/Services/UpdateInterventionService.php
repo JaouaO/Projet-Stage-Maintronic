@@ -78,6 +78,7 @@ class UpdateInterventionService
                 $planningDTO->ville    = $dto->ville;
                 $planningDTO->validated = true;
 
+                $this->planningWriteService->deleteTempBySlot($dto->numInt, (string)$dto->reaSal, $start);
                 $this->planningWriteService->purgeValidatedByNumInt($dto->numInt);
 
                 $this->planningWriteService->insertValidated($planningDTO, $dto->urgent);

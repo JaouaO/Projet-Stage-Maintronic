@@ -150,38 +150,52 @@ class MainController extends Controller
 
         // ↓ Liste unifiée des personnes sélectionnables pour ce dossier
         $people = $this->accessInterventionService->listPeopleForNumInt($numInt);
+        $agendaPeople = $this->accessInterventionService->listAgendaPeopleForNumInt($numInt);
 
         // vous pouvez passer $people à vos partials au lieu de techniciens/salaries
         return view('interventions.edit', $payload + [
+                'agendaPeople' => $agendaPeople, // {CodeSal, NomSal, access_level, is_tech, has_rdv}
                 'people' => $people, // Collection de {CodeSal, NomSal, CodeAgSal, access_level}
             ]);
     }
 
     /** API planning */
+    // MainController.php — apiPlanningTech()
+
     public function apiPlanningTech(Request $request, $codeTech): \Illuminate\Http\JsonResponse
     {
         try {
+            $numInt = (string) $request->query('numInt', '');
+            $allowed = [];
+
+            if ($numInt !== '') {
+                $allowed = $this->accessInterventionService
+                    ->listAgendaPeopleForNumInt($numInt)
+                    ->pluck('CodeSal')
+                    ->map(fn($c) => strtoupper(trim((string)$c))) // normalisation
+                    ->unique()
+                    ->values()
+                    ->all();
+            }
+
             $payload = $this->planningService->getPlanning(
                 $codeTech,
                 $request->query('from'),
                 $request->query('to'),
                 (int)$request->query('days', 5),
-                'Europe/Paris'
+                'Europe/Paris',
+                $allowed
             );
             return response()->json($payload);
         } catch (\Throwable $e) {
-            Log::error('apiPlanningTech error', ['ex' => $e->getMessage()]);
-            return response()->json([
-                'ok' => false,
-                'msg' => 'Erreur SQL lors de la lecture du planning',
-                'sql' => [
-                    'info' => $e->getMessage(),
-                    'code' => method_exists($e, 'getCode') ? $e->getCode() : null,
-                    'state' => method_exists($e, 'getSqlState') ? $e->getSqlState() : null,
-                ],
-            ], 500);
+            report($e);
+            return response()->json(['ok' => false, 'msg' => 'Erreur SQL lors de la lecture du planning'], 500);
         }
     }
+
+
+
+
 
     public function updateIntervention(UpdateInterventionRequest $request, $numInt): \Illuminate\Http\RedirectResponse
     {
@@ -329,15 +343,27 @@ class MainController extends Controller
 
     public function suggestNumInt(SuggestNumIntRequest $request)
     {
-        $ag = $request->validated()['agence'];
-        // Suggestion : AGxxx-<N+1> basé sur le max existant
-        $max = DB::table('t_intervention')
-            ->where('NumInt', 'like', $ag.'-%')
-            ->selectRaw("MAX(CAST(SUBSTRING_INDEX(NumInt, '-', -1) AS UNSIGNED)) as m")
-            ->value('m');
+        $ag    = strtoupper(trim($request->validated()['agence']));
+        $dateS = (string) $request->query('date', '');
+        $ref   = $dateS ? $this->clockService->parseLocal($dateS, '00:00')
+            : $this->clockService->now();
 
-        $next = (int)$max + 1;
-        return response()->json(['ok' => true, 'numInt' => sprintf('%s-%d', $ag, $next ?: 1)]);
+        try {
+            // ✅ même règle que partout ailleurs
+            $num = $this->interventionService->nextNumInt($ag, $ref);
+            return response()->json(['ok' => true, 'numInt' => $num]);
+        } catch (\Throwable $e) {
+            // 🔁 Fallback local : AGENCE-YYMM-##### (5 chiffres, reset chaque mois)
+            $yymm = $ref->format('ym'); // ex: 2025-10 -> "2510"
+            $max  = DB::table('t_intervention')
+                ->where('NumInt', 'like', $ag.'-'.$yymm.'-%')
+                ->selectRaw("MAX(CAST(SUBSTRING_INDEX(NumInt, '-', -1) AS UNSIGNED)) as m")
+                ->value('m');
+
+            $next = (int)$max + 1;
+            $num  = sprintf('%s-%s-%05d', $ag, $yymm, $next ?: 1);
+            return response()->json(['ok' => true, 'numInt' => $num]);
+        }
     }
 
     public function storeIntervention(StoreInterventionRequest $request): \Illuminate\Http\RedirectResponse

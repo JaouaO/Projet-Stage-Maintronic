@@ -158,6 +158,8 @@ input[type="radio"]{
 }
 .cal-cell .d{font-variant-numeric:tabular-nums}
 .cal-cell.muted{opacity:.45}
+.cal-cell.muted2{opacity:.75}
+
 .cal-cell:hover{outline:2px solid #cfe0ff}
 
 /* Heatmap (0..10) */
@@ -181,7 +183,8 @@ input[type="radio"]{
 }
 
 /* Jour courant */
-.cal-cell[aria-current="date"]{outline:2px solid #7aa7ff}
+/*.cal-cell[aria-current="date"]{outline:2px solid #7aa7ff}*/
+
 
 /* ---------- Pastilles (DYNAMIC DOTS) ---------- */
 /* Container flex en bas à gauche */
