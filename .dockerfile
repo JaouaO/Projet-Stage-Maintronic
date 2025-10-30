@@ -1,29 +1,41 @@
-# Dockerfile (racine)
-FROM php:8.2-apache
+# Dockerfile — PHP 7.4 + Apache pour Laravel 7.x
+FROM php:7.4-apache
 
-# Extensions
-RUN docker-php-ext-install pdo pdo_mysql
+# Paquets système + extensions PHP utiles à Laravel 7
+RUN apt-get update && apt-get install -y \
+    git zip unzip curl libzip-dev libicu-dev libonig-dev tzdata \
+ && docker-php-ext-configure intl \
+ && docker-php-ext-install pdo pdo_mysql mbstring intl zip \
+ && a2enmod rewrite headers \
+ && rm -rf /var/lib/apt/lists/*
 
-# Composer
+# Timezone (optionnel, cohérent avec Europe/Paris)
+ENV TZ=Europe/Paris
+
+# Composer (v2)
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
+# Dossier de travail
 WORKDIR /var/www/html
 
-# Copie du code Laravel (ici dans src/)
+# Copie du code (ton Laravel est dans src/)
+# Si ton app est à la racine, remplace "src/" par "."
 COPY src/ ./
 
-# Dep + optim
-RUN composer install --no-dev --prefer-dist --optimize-autoloader \
- && chown -R www-data:www-data storage bootstrap/cache
-
-# Apache -> public/
+# Réglage du DocumentRoot sur public/
 ENV APACHE_DOCUMENT_ROOT=/var/www/html/public
 RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' \
   /etc/apache2/sites-available/000-default.conf /etc/apache2/apache2.conf
 
-# IMPORTANT : Apache écoute sur 80.
-# Railway exposera le port où ton process écoute. Dans ce setup, pas besoin d'utiliser $PORT :
-# Railway détecte l'écoute sur 80 dans le conteneur et mappe tout seul.
+# Dépendances + optimisations
+RUN composer install --no-dev --prefer-dist --optimize-autoloader \
+ && mkdir -p storage bootstrap/cache \
+ && chown -R www-data:www-data storage bootstrap/cache \
+ && chmod -R ug+rwx storage bootstrap/cache
+
+# EntryPoint: migrations + storage:link + Apache
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 EXPOSE 80
-CMD ["apache2-foreground"]
+CMD ["/entrypoint.sh"]
