@@ -47,18 +47,4 @@ COPY ./src/ /var/www/html/
 RUN chown -R www-data:www-data storage bootstrap/cache
 
 # 5) Apache écoute le port Railway
-CMD ["/bin/sh","-lc", "\
-  : \"${PORT:=8080}\" && \
-  printf '%s\n' \
-    '<VirtualHost *:'\"$PORT\"'>' \
-    '    DocumentRoot /var/www/html/public' \
-    '    <Directory /var/www/html/public>' \
-    '        AllowOverride All' \
-    '        Require all granted' \
-    '    </Directory>' \
-    '    ErrorLog ${APACHE_LOG_DIR}/error.log' \
-    '    CustomLog ${APACHE_LOG_DIR}/access.log combined' \
-    '</VirtualHost>' \
-  > /etc/apache2/sites-available/000-default.conf && \
-  printf 'Listen %s\n' \"$PORT\" > /etc/apache2/ports.conf && \
-  exec apache2-foreground"]
+CMD ["/bin/sh", "-c", "php artisan serve --host=0.0.0.0 --port=8080"]
