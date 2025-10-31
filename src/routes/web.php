@@ -3,7 +3,9 @@
 use App\Http\Controllers\MainController;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', fn() => redirect()->route('authentification'));
+Route::get('/', function () {
+    return response('OK', 200);
+});
 
 // Auth
 Route::get('/authentification', [MainController::class, 'showLoginForm'])
